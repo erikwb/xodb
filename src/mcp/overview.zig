@@ -86,7 +86,7 @@ pub fn call(a: std.mem.Allocator, state: *State, name: []const u8, args: Value) 
             } else return error.InvalidArguments;
             if (try string(filter, "state")) |text| {
                 if (text.len == 0 or text.len > 15) return error.InvalidArguments;
-                opts.conn_state = (try a.dupeZ(u8, text)).ptr;
+                opts.conn_state = (try a.dupeSentinel(u8, text, 0)).ptr;
             }
             if (filter.object.get("uid") != null) {
                 const uid = try wire.number(filter, "uid", null);
@@ -180,11 +180,11 @@ fn processArgs(a: std.mem.Allocator, args: Value, opts: *c.struct_xrt_sys_json_o
     try wire.fields(filter, &.{ "user", "match", "state" });
     if (try string(filter, "match")) |text| {
         if (text.len == 0 or text.len > 255) return error.InvalidArguments;
-        opts.match = (try a.dupeZ(u8, text)).ptr;
+        opts.match = (try a.dupeSentinel(u8, text, 0)).ptr;
     }
     if (try string(filter, "user")) |text| {
         if (text.len == 0 or text.len > 63) return error.InvalidArguments;
-        opts.user = (try a.dupeZ(u8, text)).ptr;
+        opts.user = (try a.dupeSentinel(u8, text, 0)).ptr;
     }
     if (try string(filter, "state")) |text| {
         if (text.len != 1 or std.mem.indexOfScalar(u8, "RSDZTtIXWPKx", text[0]) == null) return error.InvalidArguments;

@@ -5,7 +5,7 @@ const platform = @import("window.zig");
 const phases = @import("../startup_phases.zig");
 const input = @import("input.zig");
 const Node = @import("../render/vk_select.zig").Node;
-const shim = @cImport(@cInclude("cocoa_shim.h"));
+const shim = @import("c_platform_cocoa");
 
 pub const Keyboard = @import("input_macos.zig").Keyboard;
 
@@ -66,7 +66,7 @@ pub const Window = struct {
     }
     pub fn setCursor(self: *Window, cursor: platform.Cursor) void {
         self.cursor = cursor;
-        if (self.opened) shim.xcocoa_set_cursor(@intFromEnum(cursor));
+        if (self.opened) shim.xcocoa_set_cursor(@backingInt(cursor));
     }
     pub fn setTitle(self: *Window, title: [*:0]const u8) void {
         if (self.opened) shim.xcocoa_set_title(title);

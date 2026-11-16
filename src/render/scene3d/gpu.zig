@@ -204,7 +204,7 @@ pub const Gpu = struct {
         pool.poolSizeCount = 1;
         pool.pPoolSizes = &pool_size;
         try created(c.vkCreateDescriptorPool(self.ctx.device, &pool, null, &self.pool), &self.pool);
-        const layouts = [_]c.VkDescriptorSetLayout{self.post_descriptors} ** 4;
+        const layouts = @as([4]c.VkDescriptorSetLayout, @splat(self.post_descriptors));
         var alloc = info(c.VkDescriptorSetAllocateInfo, c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO);
         alloc.descriptorPool = self.pool;
         alloc.descriptorSetCount = layouts.len;
@@ -310,7 +310,7 @@ pub const Gpu = struct {
     pub fn timerRead(self: *Gpu) void {
         if (!self.query_pending) return;
         self.query_pending = false;
-        var values = [_]u64{0} ** 4;
+        var values = @as([4]u64, @splat(0));
         const result = c.vkGetQueryPoolResults(self.ctx.device, self.queries, 0, 2, @sizeOf(@TypeOf(values)), &values, 16, c.VK_QUERY_RESULT_64_BIT | c.VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
         self.stats.gpu_ns = null;
         if (result != c.VK_SUCCESS or values[1] == 0 or values[3] == 0) return;
@@ -555,7 +555,7 @@ fn pipeline(ctx: Context, desc: Pipeline) !c.VkPipeline {
     return out;
 }
 fn renderPass(ctx: Context, with_depth: bool) !c.VkRenderPass {
-    var attachments = [_]c.VkAttachmentDescription{std.mem.zeroes(c.VkAttachmentDescription)} ** 2;
+    var attachments = @as([2]c.VkAttachmentDescription, @splat(std.mem.zeroes(c.VkAttachmentDescription)));
     for (&attachments, 0..) |*attachment, i| {
         attachment.format = if (i == 0) color_format else depth_format;
         attachment.samples = c.VK_SAMPLE_COUNT_1_BIT;

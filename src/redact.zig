@@ -421,7 +421,7 @@ test "scrub hides homes, names and private addresses, keeps loopback and documen
     const p = testPolicy();
     var buf: [512]u8 = undefined;
     const out = p.scrubInto(&buf, "/home/alice/src/a.c /srv/people/zed/x QUINELLA@QuarkBox.example.org zed 10.1.2.3:443 127.0.0.1 192.0.2.7 fe80::1%eth0 2001:db8::1 ::1 aa:bb:cc:dd:ee:0f v1.2.3");
-    for ([_][]const u8{ "alice", "zed", "uinella", "uark", "10.1.2.3", "fe80", "aa:bb" }) |gone| try std.testing.expect(std.ascii.indexOfIgnoreCase(out, gone) == null);
+    for ([_][]const u8{ "alice", "zed", "uinella", "uark", "10.1.2.3", "fe80", "aa:bb" }) |gone| try std.testing.expect(std.ascii.findIgnoreCase(out, gone) == null);
     for ([_][]const u8{ "~/src/a.c", "~/x", "user@host", "127.0.0.1", "192.0.2.7", "2001:db8::1", " ::1 ", "v1.2.3", ":443", "%eth0", "ip-", "mac-" }) |kept| try std.testing.expect(std.mem.indexOf(u8, out, kept) != null);
     // One peer, one name; another key, another name.
     const again = p.scrubInto(buf[400..], "10.1.2.3");
@@ -477,7 +477,7 @@ test "the machine's own names are hidden" {
     const node = std.mem.sliceTo(&uts.nodename, 0);
     var buf: [512]u8 = undefined;
     const out = p.scrubInto(&buf, node);
-    if (node.len >= 3 and !std.ascii.eqlIgnoreCase(node, "localhost")) try std.testing.expect(std.ascii.indexOfIgnoreCase(out, node) == null);
+    if (node.len >= 3 and !std.ascii.eqlIgnoreCase(node, "localhost")) try std.testing.expect(std.ascii.findIgnoreCase(out, node) == null);
     if (env("HOME")) |home| if (home.len > 1) {
         const scrubbed = p.scrubInto(&buf, home);
         try std.testing.expect(std.mem.indexOf(u8, scrubbed, home) == null);

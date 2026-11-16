@@ -254,7 +254,7 @@ const View = struct {
             const y = bounds.y + @as(f32, @floatFromInt(node.depth - root.depth)) * 27 - self.scroll;
             if (w < 1 or y < bounds.y or y + 25 > bounds.y + bounds.h) continue;
             const rect = gpu.Rect{ .x = x, .y = y, .w = @max(0, w - 1), .h = 25 };
-            const match = self.query_len > 0 and std.ascii.indexOfIgnoreCase(node.frame.name, self.query[0..self.query_len]) != null;
+            const match = self.query_len > 0 and std.ascii.findIgnoreCase(node.frame.name, self.query[0..self.query_len]) != null;
             const hash = std.hash.Wyhash.hash(1, node.frame.name);
             const color: gpu.Color = if (match or node.id == self.selected) .{ 0.9, 0.65, 0.25, 1 } else .{ 0.08 + @as(f32, @floatFromInt(hash % 16)) / 100, 0.10 + @as(f32, @floatFromInt((hash >> 8) % 16)) / 100, 0.16, 1 };
             try r.rect(rect, color);

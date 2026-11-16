@@ -190,7 +190,7 @@ pub const State = struct {
             return error.FrameMemoryLimit;
         } };
         errdefer job.deinit();
-        if (path) |p| job.path = a.dupeZ(u8, p) catch return error.FrameMemoryLimit;
+        if (path) |p| job.path = a.dupeSentinel(u8, p, 0) catch return error.FrameMemoryLimit;
         return job;
     }
     fn start(self: *State, job: *Job) !void {
@@ -390,7 +390,7 @@ pub const State = struct {
             const s = source.?;
             const metadata = s.encodeMetadata(arena.allocator()) catch |err| return if (err == error.OutOfMemory) error.FrameMemoryLimit else err;
             if (metadata.len > c.XFB_MAX_METADATA) return error.FrameInputLimit;
-            view.sources[i] = .{ .kind = @intFromEnum(s.kind), .stability = s.input.stability, .metadata = metadata.ptr, .metadata_size = metadata.len, .bytes = s.input.bytes, .size = s.input.size, .sha256 = s.input.sha256 };
+            view.sources[i] = .{ .kind = @backingInt(s.kind), .stability = s.input.stability, .metadata = metadata.ptr, .metadata_size = metadata.len, .bytes = s.input.bytes, .size = s.input.size, .sha256 = s.input.sha256 };
             encoded_bytes += c.XFB_HEADER_BYTES + metadata.len + s.input.size;
         }
         if (encoded_bytes > budget.limit - budget.used) return error.FrameMemoryLimit;

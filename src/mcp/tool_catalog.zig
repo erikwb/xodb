@@ -57,19 +57,47 @@ pub fn validate(a: std.mem.Allocator, catalogs: []const Catalog, failure: *?Fail
     const scratch = arena.allocator();
     var names: [3]std.StringHashMapUnmanaged(void) = @splat(.empty);
     for (catalogs) |catalog| {
-        errdefer |err| failure.* = .{ .catalog = catalog.name, .reason = err };
-        const parsed = try std.json.parseFromSliceLeaky(Value, scratch, catalog.text, .{});
-        if (parsed != .array) return error.InvalidToolCatalog;
-        for (parsed.array.items) |definition| {
-            if (definition != .object) return error.InvalidToolDefinition;
-            const name = definition.object.get("name") orelse return error.MissingToolName;
-            if (name != .string or name.string.len == 0) return error.InvalidToolName;
-            const required = try access(definition);
-            if (catalog.group != .session and required == .lease) return error.InvalidToolSessionAccess;
-            const saved = try names[@intFromEnum(catalog.group)].getOrPut(scratch, name.string);
-            if (saved.found_existing) return error.DuplicateToolName;
-        }
+        validateCatalog(scratch, catalog, &names[@backingInt(catalog.group)]) catch |err| {
+            failure.* = .{ .catalog = catalog.name, .reason = err };
+            return err;
+        };
     }
+}
+
+fn validateCatalog(scratch: std.mem.Allocator, catalog: Catalog, names: *std.StringHashMapUnmanaged(void)) !void {
+    const parsed = try std.json.parseFromSliceLeaky(Value, scratch, catalog.text, .{});
+    if (parsed != .array) return error.InvalidToolCatalog;
+    for (parsed.array.items) |definition| {
+        if (definition != .object) return error.InvalidToolDefinition;
+        const name = definition.object.get("name") orelse return error.MissingToolName;
+        if (name != .string or name.string.len == 0) return error.InvalidToolName;
+        const required = try access(definition);
+        if (catalog.group != .session and required == .lease) return error.InvalidToolSessionAccess;
+        const saved = try names.getOrPut(scratch, name.string);
+        if (saved.found_existing) return error.DuplicateToolName;
+    }
+}
+
+test "catalog failures identify the failing fragment and clear on success" {
+    const t = std.testing;
+    const tool = "[{\"name\":\"inspect\",\"annotations\":{\"readOnlyHint\":true,\"xodbSessionAccess\":\"observer\"}}]";
+    var failure: ?Failure = null;
+    try t.expectError(error.DuplicateToolName, validate(t.allocator, &.{
+        .{ .name = "first", .text = tool, .group = .native },
+        .{ .name = "second", .text = tool, .group = .native },
+    }, &failure));
+    try t.expectEqualStrings("second", failure.?.catalog);
+    try t.expectEqual(error.DuplicateToolName, failure.?.reason);
+    try validate(t.allocator, &.{
+        .{ .name = "first", .text = tool, .group = .native },
+        .{ .name = "second", .text = tool, .group = .imported },
+    }, &failure);
+    try t.expect(failure == null);
+    try t.expectError(error.InvalidToolCatalog, validate(t.allocator, &.{
+        .{ .name = "malformed", .text = "{}", .group = .native },
+    }, &failure));
+    try t.expectEqualStrings("malformed", failure.?.catalog);
+    try t.expectEqual(error.InvalidToolCatalog, failure.?.reason);
 }
 
 /// Keep the same array assembly in the build check and every published list.

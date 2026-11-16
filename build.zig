@@ -1,9 +1,15 @@
 const std = @import("std");
 
+fn readBuildFile(b: *std.Build, path: []const u8, limit: std.Io.Limit) ![]u8 {
+    b.dependOnFileContents(b.path(path));
+    var root = try b.root.openDir(b.graph.io, ".", .{});
+    defer root.close(b.graph.io);
+    return root.readFileAlloc(b.graph.io, path, b.allocator, limit);
+}
+
 fn loadRuntimeSources(b: *std.Build) []const []const u8 {
     const a = b.allocator;
-    const io = b.graph.io;
-    const text = b.build_root.handle.readFileAlloc(io, "src/runtime/runtime_sources.list", a, .limited(64 * 1024)) catch
+    const text = readBuildFile(b, "src/runtime/runtime_sources.list", .limited(64 * 1024)) catch
         @panic("src/runtime/runtime_sources.list");
     var list: std.ArrayList([]const u8) = .empty;
     var it = std.mem.splitScalar(u8, text, '\n');
@@ -33,7 +39,7 @@ const macos_seam_sources = [_][]const u8{ "cancel.c", "gdb_packet.c", "gdb_link.
 /// named in XRT_RPC_CAP_DEFINED. Every `#define XRT_RPC_CAP_<name> UINT64_C(`
 /// must be named there too, or the build stops.
 fn checkCapRegistry(b: *std.Build) void {
-    const text = b.build_root.handle.readFileAlloc(b.graph.io, "src/runtime/rpc.h", b.allocator, .limited(1024 * 1024)) catch
+    const text = readBuildFile(b, "src/runtime/rpc.h", .limited(1024 * 1024)) catch
         @panic("src/runtime/rpc.h");
     const start = std.mem.indexOf(u8, text, "#define XRT_RPC_CAP_DEFINED(X)") orelse @panic("rpc.h has no XRT_RPC_CAP_DEFINED");
     const end = std.mem.indexOfPos(u8, text, start, "\n#") orelse text.len;
@@ -67,7 +73,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/profile/perf_regs_gen.zig"),
             .target = b.graph.host,
-            .optimize = .ReleaseSafe,
+            .optimize = .safe,
         }),
     });
     const perf_regs_run = b.addRunArtifact(perf_regs_gen);
@@ -133,13 +139,15 @@ pub fn build(b: *std.Build) void {
     switch (capstone_link) {
         .system => module.linkSystemLibrary("capstone", .{}),
         .vendored => {
-            // Zig 0.16 filesystem calls take an Io. Existence is mode 0 (F_OK).
+            // Reconfigure if the private prefix is installed or removed.
+            b.dependOnFileMetadata(b.path(".work/capstone/lib/libcapstone.a"));
+            b.dependOnFileMetadata(b.path(".work/capstone/include/capstone/capstone.h"));
             const io = b.graph.io;
-            b.build_root.handle.access(io, ".work/capstone/lib/libcapstone.a", .{}) catch {
+            b.root.access(io, ".work/capstone/lib/libcapstone.a", .{}) catch {
                 std.debug.print("vendored Capstone prefix is missing; run scripts/build-capstone\n", .{});
                 std.process.exit(1);
             };
-            b.build_root.handle.access(io, ".work/capstone/include/capstone/capstone.h", .{}) catch {
+            b.root.access(io, ".work/capstone/include/capstone/capstone.h", .{}) catch {
                 std.debug.print("vendored Capstone prefix is missing; run scripts/build-capstone\n", .{});
                 std.process.exit(1);
             };
@@ -235,16 +243,17 @@ pub fn build(b: *std.Build) void {
             module.addAnonymousImport(b.fmt("scene_{s}_{s}", .{ name[0..dot], name[dot + 1 ..] }), .{ .root_source_file = spv });
         }
     }
+    @import("build_c.zig").add(b, module, gui, @tagName(platform));
     const catalog_check = b.step("check-catalog", "Validate embedded MCP tool catalogs and access classifications");
-    catalog_check.makeFn = struct {
-        fn make(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
-            const catalog = @import("src/mcp/tool_catalog.zig");
-            var failure: ?catalog.Failure = null;
-            catalog.validateInputs(step.owner.allocator, &failure) catch |err| {
-                return step.fail("MCP catalog {s}: {s}", .{ if (failure) |f| f.catalog else "validation", @errorName(err) });
-            };
-        }
-    }.make;
+    const catalog_validator = b.addExecutable(.{
+        .name = "check-catalog",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/mcp/check_catalog.zig"),
+            .target = b.graph.host,
+            .optimize = .safe,
+        }),
+    });
+    catalog_check.dependOn(&b.addRunArtifact(catalog_validator).step);
     const exe = b.addExecutable(.{ .name = "xodb", .root_module = module });
     exe.step.dependOn(catalog_check);
     const install_exe = b.addInstallArtifact(exe, .{});
@@ -260,30 +269,30 @@ pub fn build(b: *std.Build) void {
         app_step.dependOn(&installed_helper.step);
     }
     const run = b.addRunArtifact(exe);
-    if (b.args) |args| run.addArgs(args);
+    run.addPassthruArgs();
     b.step("run", "Run xodb").dependOn(&run.step);
-    const fixture = b.addExecutable(.{ .name = "xodb-fixture", .root_module = b.createModule(.{ .target = target, .optimize = .Debug, .link_libc = true }) });
+    const fixture = b.addExecutable(.{ .name = "xodb-fixture", .root_module = b.createModule(.{ .target = target, .optimize = .debug, .link_libc = true }) });
     fixture.root_module.addCSourceFile(.{ .file = b.path("tests/fixtures/target.c"), .flags = &.{ "-g", "-O0", "-pthread" } });
     b.installArtifact(fixture);
-    const m1 = b.addExecutable(.{ .name = "xodb-m1-fixture", .root_module = b.createModule(.{ .target = target, .optimize = .Debug, .link_libc = true }) });
+    const m1 = b.addExecutable(.{ .name = "xodb-m1-fixture", .root_module = b.createModule(.{ .target = target, .optimize = .debug, .link_libc = true }) });
     m1.root_module.addCSourceFile(.{ .file = b.path("tests/fixtures/m1.c"), .flags = &.{ "-g", "-gdwarf-4", "-O0", "-fno-omit-frame-pointer" } });
     b.installArtifact(m1);
-    const m2 = b.addExecutable(.{ .name = "xodb-m2-fixture", .root_module = b.createModule(.{ .target = target, .optimize = .Debug, .link_libc = true }) });
+    const m2 = b.addExecutable(.{ .name = "xodb-m2-fixture", .root_module = b.createModule(.{ .target = target, .optimize = .debug, .link_libc = true }) });
     m2.root_module.addCSourceFile(.{ .file = b.path("tests/fixtures/m2.c"), .flags = &.{ "-g", "-gdwarf-4", "-O0", "-fno-omit-frame-pointer" } });
     b.installArtifact(m2);
-    const observations = b.addExecutable(.{ .name = "xodb-observation-fixture", .root_module = b.createModule(.{ .target = target, .optimize = .Debug, .link_libc = true }) });
+    const observations = b.addExecutable(.{ .name = "xodb-observation-fixture", .root_module = b.createModule(.{ .target = target, .optimize = .debug, .link_libc = true }) });
     observations.root_module.addCSourceFile(.{ .file = b.path("tests/fixtures/observations.c"), .flags = &.{ "-g", "-O0", "-fno-omit-frame-pointer", "-fno-optimize-sibling-calls" } });
     b.installArtifact(observations);
-    const profile = b.addExecutable(.{ .name = "xodb-profile-fixture", .root_module = b.createModule(.{ .target = target, .optimize = .ReleaseSafe, .link_libc = true }) });
+    const profile = b.addExecutable(.{ .name = "xodb-profile-fixture", .root_module = b.createModule(.{ .target = target, .optimize = .safe, .link_libc = true }) });
     profile.root_module.addCSourceFile(.{ .file = b.path("tests/fixtures/profile.c"), .flags = &.{ "-g", "-gdwarf-4", "-O2", "-fno-omit-frame-pointer", "-mno-omit-leaf-frame-pointer", "-fno-optimize-sibling-calls", "-pthread" } });
     b.installArtifact(profile);
-    const profile_start = b.addExecutable(.{ .name = "xodb-profile-start-fixture", .root_module = b.createModule(.{ .target = target, .optimize = .ReleaseSafe, .link_libc = true }) });
+    const profile_start = b.addExecutable(.{ .name = "xodb-profile-start-fixture", .root_module = b.createModule(.{ .target = target, .optimize = .safe, .link_libc = true }) });
     profile_start.root_module.addCSourceFile(.{ .file = b.path("tests/fixtures/profile-from-start.c"), .flags = &.{ "-g", "-gdwarf-4", "-O2", "-fno-omit-frame-pointer", "-mno-omit-leaf-frame-pointer", "-fno-optimize-sibling-calls", "-Wall", "-Wextra", "-Werror" } });
     b.installArtifact(profile_start);
-    const lifecycle = b.addExecutable(.{ .name = "xodb-lifecycle-fixture", .root_module = b.createModule(.{ .target = target, .optimize = .Debug, .link_libc = true }) });
+    const lifecycle = b.addExecutable(.{ .name = "xodb-lifecycle-fixture", .root_module = b.createModule(.{ .target = target, .optimize = .debug, .link_libc = true }) });
     lifecycle.root_module.addCSourceFile(.{ .file = b.path("tests/fixtures/lifecycle.c"), .flags = &.{ "-g", "-O0", "-pthread" } });
     b.installArtifact(lifecycle);
-    const process = b.addExecutable(.{ .name = "xodb-process-fixture", .root_module = b.createModule(.{ .target = target, .optimize = .Debug, .link_libc = true }) });
+    const process = b.addExecutable(.{ .name = "xodb-process-fixture", .root_module = b.createModule(.{ .target = target, .optimize = .debug, .link_libc = true }) });
     process.root_module.addCSourceFile(.{ .file = b.path("tests/fixtures/process-tree.c"), .flags = &.{ "-g", "-O0", "-fno-omit-frame-pointer" } });
     b.installArtifact(process);
     const fd_fixture = b.addExecutable(.{ .name = "xodb-fd-fixture", .root_module = b.createModule(.{ .target = target, .optimize = optimize, .link_libc = true }) });
@@ -301,7 +310,7 @@ pub fn build(b: *std.Build) void {
     const remote_lifecycle_tests = b.addTest(.{ .name = "xodb-remote-lifecycle-test", .root_module = module, .filters = &.{ "silent saturated queue", "late old completion", "process identity compares start", "publications retain nested strings" } });
     b.installArtifact(remote_lifecycle_tests);
     b.step("remote-lifecycle", "Test remote queue shutdown and stale incarnation refusal").dependOn(&b.addRunArtifact(remote_lifecycle_tests).step);
-    if (optimize == .Debug) {
+    if (optimize == .debug) {
         // Zig 0.16.0's self-hosted Debug backend segfaults on this module.
         // main through snapshot.configure compiles, and so does a tiny program
         // that calls appearance.init or semq/static_image.zig decompile. That
@@ -588,7 +597,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit and real target integration tests");
     if (gui) {
         const coverage = b.addTest(.{ .root_module = module, .filters = &.{"bundled bitmap font covers every mark"} });
-        if (optimize == .Debug or capstone_link == .vendored) coverage.use_llvm = true;
+        if (optimize == .debug or capstone_link == .vendored) coverage.use_llvm = true;
         if (capstone_link == .vendored) coverage.each_lib_rpath = false;
         const empty = b.addWriteFiles();
         _ = empty.add(".keep", "");
@@ -739,7 +748,7 @@ pub fn build(b: *std.Build) void {
     javascript_layout_tests.root_module.linkSystemLibrary("libdw", .{});
     const layout_run = b.addRunArtifact(javascript_layout_tests);
     for ([_][]const u8{ "good", "bad" }, 0..) |name, i| {
-        const layout_fixture = b.addExecutable(.{ .name = b.fmt("xodb-javascript-layout-{s}", .{name}), .root_module = b.createModule(.{ .target = target, .optimize = .Debug, .link_libc = true }) });
+        const layout_fixture = b.addExecutable(.{ .name = b.fmt("xodb-javascript-layout-{s}", .{name}), .root_module = b.createModule(.{ .target = target, .optimize = .debug, .link_libc = true }) });
         layout_fixture.root_module.addCSourceFile(.{ .file = b.path("tests/fixtures/javascript/layout.cc"), .flags = &.{ "-std=c++17", "-g", "-fstandalone-debug", "-fno-eliminate-unused-debug-types", if (i == 0) "-DWRONG_LAYOUT=0" else "-DWRONG_LAYOUT=8" } });
         layout_run.addArtifactArg(layout_fixture);
     }
@@ -830,12 +839,14 @@ pub fn build(b: *std.Build) void {
 fn fontCoverageSources(b: *std.Build) !*std.Build.Step.Options {
     const a = b.allocator;
     const io = b.graph.io;
-    var dir = try b.build_root.handle.openDir(io, "src/ui/overview", .{ .iterate = true });
+    b.dependOnDirectoryContents(b.path("src/ui/overview"));
+    var dir = try b.root.openDir(io, "src/ui/overview", .{ .iterate = true });
     defer dir.close(io);
     var walker = try dir.walk(a);
     defer walker.deinit();
     var paths: std.ArrayList([]const u8) = .empty;
     while (try walker.next(io)) |entry| {
+        if (entry.kind == .directory) b.dependOnDirectoryContents(b.path(b.fmt("src/ui/overview/{s}", .{entry.path})));
         if (entry.kind == .file and std.mem.endsWith(u8, entry.basename, ".zig")) try paths.append(a, try a.dupe(u8, entry.path));
     }
     std.mem.sort([]const u8, paths.items, {}, struct {
@@ -844,7 +855,9 @@ fn fontCoverageSources(b: *std.Build) !*std.Build.Step.Options {
         }
     }.less);
     const sources = try a.alloc([]const u8, paths.items.len);
-    for (paths.items, sources) |path, *source| source.* = try dir.readFileAlloc(io, path, a, .limited(4 * 1024 * 1024));
+    for (paths.items, sources) |path, *source| {
+        source.* = try readBuildFile(b, b.fmt("src/ui/overview/{s}", .{path}), .limited(4 * 1024 * 1024));
+    }
     const options = b.addOptions();
     options.addOption([]const []const u8, "paths", paths.items);
     options.addOption([]const []const u8, "sources", sources);

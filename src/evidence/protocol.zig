@@ -252,7 +252,7 @@ fn httpFraming(headers: []const u8) Framing {
         const name = std.mem.trim(u8, line[0..colon], " \t");
         const value = std.mem.trim(u8, line[colon + 1 ..], " \t");
         if (std.ascii.eqlIgnoreCase(name, "content-length")) out.content_length = std.fmt.parseInt(usize, value, 10) catch null;
-        if (std.ascii.eqlIgnoreCase(name, "transfer-encoding") and std.ascii.indexOfIgnoreCase(value, "chunked") != null) out.chunked = true;
+        if (std.ascii.eqlIgnoreCase(name, "transfer-encoding") and std.ascii.findIgnoreCase(value, "chunked") != null) out.chunked = true;
     }
     return out;
 }

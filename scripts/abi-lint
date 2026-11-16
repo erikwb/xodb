@@ -20,6 +20,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 unions = set()
 fnptrs = {}
@@ -109,36 +110,21 @@ def include_flags(proto):
 def compile_blocks(blocks, includes, env, gen_dir):
     os.makedirs(gen_dir, exist_ok=True)
     failed = []
-
-    def one(group, tag):
-        parts = [
-            "const gui: bool = true;\n",
-            "const macos = @import(\"builtin\").os.tag == .macos;\n",
-        ]
-        for n, (_origin, body) in enumerate(group):
-            parts.append(f"const c{n} = @cImport({body});\n")
-        parts.append("export fn abi_lint_use() void {\n")
-        for n in range(len(group)):
-            parts.append(f"    _ = c{n};\n")
-        parts.append("}\n")
-        path = os.path.join(gen_dir, tag + ".zig")
-        obj = os.path.join(gen_dir, tag + ".o")
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write("".join(parts))
-        cmd = ["zig", "build-obj", "-lc", "-ODebug", "-femit-bin=" + obj, path, *includes]
+    for n, (origin, body) in enumerate(blocks):
+        dest = os.path.join(gen_dir, str(n))
+        os.makedirs(dest, exist_ok=True)
+        header = os.path.join(dest, "bindings.h")
+        translated = os.path.join(dest, "cimport.zig")
+        with open(header, "w", encoding="utf-8") as fh:
+            fh.write(body)
+        cmd = ["zig", "translate-c", "-lc", "-Odebug", "-DXODB_GUI=1", header, *includes]
         ran = subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True)
-        if ran.returncode != 0:
+        if ran.returncode:
+            failed.append(origin)
             sys.stderr.write(ran.stderr[-4000:])
-            return False
-        return True
-
-    if one(blocks, "all"):
-        return []
-    sys.stderr.write("abi-lint: combined translate failed; retrying each block\n")
-    for n, block in enumerate(blocks):
-        if not one([block], f"b{n}"):
-            failed.append(block[0])
-            sys.stderr.write(f"abi-lint: translate failed {block[0]}\n")
+        else:
+            with open(translated, "w", encoding="utf-8") as fh:
+                fh.write(ran.stdout)
     return failed
 
 
@@ -526,7 +512,19 @@ def main():
     seen = set()
     for path in sources:
         text = open(path, encoding="utf-8", errors="replace").read()
-        for body in extract_blocks(text):
+        bodies = []
+        for binding in re.findall(r'@import\("c_([a-z0-9_]+)"\)', text):
+            if binding in ("c_macos", "platform_cocoa"):
+                continue
+            header = os.path.join(ROOT, "src", "bindings", binding + ".h")
+            if not os.path.isfile(header):
+                header = os.path.join(os.path.dirname(path), "c_" + binding + ".h")
+            if os.path.isfile(header):
+                bodies.append('#include "' + header + '"\n')
+        for block in extract_blocks(text):
+            headers = re.findall(r'@cInclude\("([^"\n]+)"\)', block)
+            bodies.append("\n".join('#include "' + h + '"' for h in headers))
+        for body in bodies:
             key = (os.path.dirname(path), body)
             if key in seen:
                 continue
@@ -540,8 +538,9 @@ def main():
     env["ZIG_GLOBAL_CACHE_DIR"] = os.path.join(work, "gcache")
     os.makedirs(env["ZIG_LOCAL_CACHE_DIR"], exist_ok=True)
     os.makedirs(env["ZIG_GLOBAL_CACHE_DIR"], exist_ok=True)
-    failed = compile_blocks(blocks, include_flags(proto), env, os.path.join(work, "gen"))
-    structs, aliases, enums, funcs = parse_cimports([env["ZIG_LOCAL_CACHE_DIR"], env["ZIG_GLOBAL_CACHE_DIR"]])
+    with tempfile.TemporaryDirectory(prefix="gen-", dir=work) as gen_dir:
+        failed = compile_blocks(blocks, include_flags(proto), env, gen_dir)
+        structs, aliases, enums, funcs = parse_cimports([gen_dir])
     if "xcb_screen_iterator_t" not in structs and "xcb_screen_iterator_t" not in aliases:
         sys.stderr.write("abi-lint: xcb_screen_iterator_t was not translated\n")
         return 2

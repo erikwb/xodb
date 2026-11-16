@@ -350,7 +350,7 @@ fn readBindings(session: *const Context, a: A, tid: i32, segment_index: usize, f
     const layout = try profile(session, module);
     var r = reader(session);
     const raw = try a.create(c.struct_xl_locals);
-    if (expression) |text| c.xl_local_find(layout, &r, state, frame, try a.dupeZ(u8, text), raw) else c.xl_locals_read(layout, &r, state, frame, start, limit, raw);
+    if (expression) |text| c.xl_local_find(layout, &r, state, frame, try a.dupeSentinel(u8, text, 0), raw) else c.xl_locals_read(layout, &r, state, frame, start, limit, raw);
     const ci = try std.fmt.parseInt(u64, segment.frames[frame].call_info, 0);
     if (raw.call_info != 0 and raw.call_info != ci) return error.StaleLanguageFrame;
     const rows = try a.alloc(named.Row, raw.count);
@@ -430,14 +430,14 @@ fn watchValue(session: *const Context, a: A, capture: *WatchCapture, frame: usiz
     if (raw.call_info != 0 and raw.call_info != capture.scope.frame[0]) return error.StaleLanguageFrame;
     const why: [*c]const u8 = if (raw.reason != null) raw.reason else if (raw.count != 1) "LuaWatchBindingUnavailable" else raw.items[0].reason;
     if (why) |message| {
-        capture.diagnostic = try a.dupeZ(u8, std.mem.span(message));
+        capture.diagnostic = try a.dupeSentinel(u8, std.mem.span(message), 0);
         return;
     }
     const item = &raw.items[0];
     if (item.kind == c.XL_VARARGS or (item.address == 0 and item.path_absent == 0)) return error.LuaWatchBindingHasNoStorage;
     if (item.name_truncated != 0) return error.LuaWatchNameTruncated;
     if (page != null) {
-        capture.expression = try a.dupeZ(u8, std.mem.sliceTo(&item.name, 0));
+        capture.expression = try a.dupeSentinel(u8, std.mem.sliceTo(&item.name, 0), 0);
         if (capture.expression.len > c.XLW_EXPRESSION) return error.LuaWatchNameTooLong;
         capture.scope.frame[2] = if (item.kind == c.XL_LOCAL) 1 else 2;
         capture.scope.frame[3] = item.declaration;
@@ -446,17 +446,17 @@ fn watchValue(session: *const Context, a: A, capture: *WatchCapture, frame: usiz
     var length: usize = 0;
     var kind: c.enum_xl_sample_kind = undefined;
     if (c.xl_local_sample(layout, &r, item, bytes.ptr, bytes.len, &length, &kind)) |message| {
-        capture.diagnostic = try a.dupeZ(u8, std.mem.span(message));
+        capture.diagnostic = try a.dupeSentinel(u8, std.mem.span(message), 0);
         return;
     }
     capture.observation = c.XLW_COMPLETE;
-    capture.sample = .{ .kind = kind, .bytes = bytes.ptr, .size = length, .type = (try a.dupeZ(u8, std.mem.sliceTo(&item.value.type, 0))).ptr, .display = (try a.dupeZ(u8, std.mem.sliceTo(&item.value.display, 0))).ptr };
+    capture.sample = .{ .kind = kind, .bytes = bytes.ptr, .size = length, .type = (try a.dupeSentinel(u8, std.mem.sliceTo(&item.value.type, 0), 0)).ptr, .display = (try a.dupeSentinel(u8, std.mem.sliceTo(&item.value.display, 0), 0)).ptr };
 }
 pub fn watchExpression(a: A, expression: ?[]const u8, row: ?usize) ![:0]const u8 {
     if ((expression == null) == (row == null)) return error.InvalidArguments;
     if (expression) |text| if (text.len == 0 or text.len > c.XLW_EXPRESSION or std.mem.indexOfScalar(u8, text, 0) != null) return error.InvalidArguments;
     if (row) |index| if (index >= 4096) return error.InvalidArguments;
-    const checked_expression = try a.dupeZ(u8, expression orelse "binding");
+    const checked_expression = try a.dupeSentinel(u8, expression orelse "binding", 0);
     if (expression != null and c.xl_expression_valid(checked_expression) == 0) return error.LuaExpressionUnsupported;
     return checked_expression;
 }
@@ -481,7 +481,7 @@ pub fn observeWatch(session: *const Context, a: A, observed: Stack, scope: c.str
     const module_id = (try runtimeModule(session)).id;
     if (module_id != scope.runtime[0]) {
         capture.scope.runtime[0] = module_id;
-        capture.diagnostic = try a.dupeZ(u8, "LuaWatchRuntimeChanged");
+        capture.diagnostic = try a.dupeSentinel(u8, "LuaWatchRuntimeChanged", 0);
         return capture;
     }
     for (observed.segments) |segment| {
@@ -489,7 +489,7 @@ pub fn observeWatch(session: *const Context, a: A, observed: Stack, scope: c.str
         for (segment.frames, 0..) |frame, index| {
             if (try std.fmt.parseInt(u64, frame.call_info, 0) != scope.frame[0]) continue;
             if (!frame.identity_proved) {
-                capture.diagnostic = try a.dupeZ(u8, frame.reason orelse "LuaWatchFrameUnproved");
+                capture.diagnostic = try a.dupeSentinel(u8, frame.reason orelse "LuaWatchFrameUnproved", 0);
                 return capture;
             }
             if (frame.prototype == null or try std.fmt.parseInt(u64, frame.prototype.?, 0) != scope.frame[1]) break;
@@ -501,11 +501,11 @@ pub fn observeWatch(session: *const Context, a: A, observed: Stack, scope: c.str
         // pairing may remain partial independently of that walk.
         if (segment.chain_complete) {
             capture.observation = c.XLW_FRAME_GONE;
-            capture.diagnostic = try a.dupeZ(u8, "LuaWatchFrameGone");
-        } else capture.diagnostic = try a.dupeZ(u8, segment.reason orelse "LuaWatchFrameUnproved");
+            capture.diagnostic = try a.dupeSentinel(u8, "LuaWatchFrameGone", 0);
+        } else capture.diagnostic = try a.dupeSentinel(u8, segment.reason orelse "LuaWatchFrameUnproved", 0);
         try session.expectGeneration(observed.generation);
         return capture;
     }
-    capture.diagnostic = try a.dupeZ(u8, "LuaWatchCoroutineNotObserved");
+    capture.diagnostic = try a.dupeSentinel(u8, "LuaWatchCoroutineNotObserved", 0);
     return capture;
 }

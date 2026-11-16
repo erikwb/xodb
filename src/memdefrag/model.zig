@@ -172,7 +172,7 @@ pub const State = enum {
     free_frag,
     zero,
 };
-pub const state_count = @typeInfo(State).@"enum".fields.len;
+pub const state_count = @typeInfo(State).@"enum".field_names.len;
 pub const Change = enum { none, changed, collapsed, split };
 
 pub const Look = struct {

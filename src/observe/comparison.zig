@@ -70,7 +70,7 @@ pub const Cohort = struct {
         self.returns.deinit(a);
     }
 };
-pub const reason_count = @typeInfo(types.Reason).@"enum".fields.len;
+pub const reason_count = @typeInfo(types.Reason).@"enum".field_names.len;
 pub const Summary = struct {
     total_calls: u64 = 0,
     matched_calls: u64 = 0,
@@ -233,7 +233,7 @@ pub fn buildWithCancel(a: Allocator, store: *const calls.Store, selection: Selec
                     counts[@intFromBool(ns >= selection.threshold_ns)] += 1;
                 } else {
                     result.summary.incomplete_calls += 1;
-                    result.summary.incomplete_by_reason[@intFromEnum(call.reason)] += 1;
+                    result.summary.incomplete_by_reason[@backingInt(call.reason)] += 1;
                 }
             },
         }
@@ -325,7 +325,7 @@ test "unequal cohorts top-N counts and incomplete exclusions are conserved" {
     try std.testing.expectEqual(@as(u64, 1), view.fast.returns.unavailable);
     try std.testing.expectEqual(@as(u32, 0), args.values[0].entry_record);
     try std.testing.expectEqual(@as(u32, 1), args.values[0].return_record);
-    try std.testing.expectEqual(@as(u64, 1), view.summary.incomplete_by_reason[@intFromEnum(types.Reason.cancelled)]);
+    try std.testing.expectEqual(@as(u64, 1), view.summary.incomplete_by_reason[@backingInt(types.Reason.cancelled)]);
 }
 test "entry-time thread and exact-value selection never substitutes missing values" {
     const a = std.testing.allocator;

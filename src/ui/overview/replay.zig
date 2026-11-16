@@ -165,8 +165,8 @@ pub fn parseOne(gpa: std.mem.Allocator, line: []const u8) !*m.Owned {
         s.memory_viewports = maps;
     };
     if (get(r, "groups")) |groups| if (groups == .object) {
-        inline for (std.meta.fields(m.Group), 0..) |g, i| {
-            if (groups.object.get(g.name)) |x| {
+        inline for (@typeInfo(m.Group).@"enum".field_names, 0..) |g_name, i| {
+            if (groups.object.get(g_name)) |x| {
                 const st = state(x);
                 const cost: ?u64 = u64f(get(x, "cost_ns")).get() orelse if (u64f(get(x, "cost_us")).get()) |us| us * 1000 else null;
                 s.groups[i] = .{ .status = st, .reason = if (st == .ok) "" else why(x), .detail = str(get(x, "detail")), .cost_ns = cost };
@@ -373,9 +373,16 @@ pub fn parseOne(gpa: std.mem.Allocator, line: []const u8) !*m.Owned {
         const list = rows(svc, &.{ "rows", "services", "service" });
         const out = try a.alloc(m.Service, list.len);
         for (list, out) |x, *o| o.* = .{
-            .name = str(get(x, "name")), .state = text(get(x, "state")), .pid = u64f(get(x, "pid")),
-            .start = u64f(get(x, "start_ticks")), .uid = u64f(get(x, "uid")), .user = text(get(x, "user")),
-            .uptime = f64f(get(x, "uptime_s")), .cpu = f64f(get(x, "cpu_pct")), .rss = u64f(get(x, "rss")), .cgroup = text(get(x, "cgroup")),
+            .name = str(get(x, "name")),
+            .state = text(get(x, "state")),
+            .pid = u64f(get(x, "pid")),
+            .start = u64f(get(x, "start_ticks")),
+            .uid = u64f(get(x, "uid")),
+            .user = text(get(x, "user")),
+            .uptime = f64f(get(x, "uptime_s")),
+            .cpu = f64f(get(x, "cpu_pct")),
+            .rss = u64f(get(x, "rss")),
+            .cgroup = text(get(x, "cgroup")),
         };
         s.services = out;
     }
@@ -502,7 +509,6 @@ test "replay keeps unavailable reasons and never invents zeros" {
     defer r.deinit();
     try std.testing.expectEqual(@as(usize, 2), r.frames.len);
 }
-
 
 test "service replay preserves process identity, rates and missing fields" {
     const line =

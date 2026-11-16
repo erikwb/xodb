@@ -204,7 +204,7 @@ pub fn readLocals(session: *const Context, a: A, observed: Stack, tid: i32, segm
 }
 pub fn checkedExpression(a: A, text: []const u8) ![:0]const u8 {
     if (text.len == 0 or text.len > c.XLW_EXPRESSION or std.mem.indexOfScalar(u8, text, 0) != null) return error.UnsupportedRubyExpression;
-    const query = try a.dupeZ(u8, text);
+    const query = try a.dupeSentinel(u8, text, 0);
     if (c.xrb_expression_check(query) != null) return error.UnsupportedRubyExpression;
     return query;
 }
@@ -248,7 +248,7 @@ fn bindings(session: *const Context, a: A, observed: Stack, tid: i32, segment_in
     const zjit = try zjitEntry(session, module);
     const context = try readContext(module, expression orelse "");
     if (expression) |text| {
-        c.xrb_expression_find(layout, &r, &context, ec, zjit, frame, try a.dupeZ(u8, text), raw);
+        c.xrb_expression_find(layout, &r, &context, ec, zjit, frame, try a.dupeSentinel(u8, text, 0), raw);
     } else c.xrb_locals_read(layout, &r, ec, zjit, &context, frame, start, limit, raw);
     const rows = try a.alloc(named.Row, raw.count);
     for (raw.items[0..raw.count], rows) |item, *out| out.* = .{
@@ -290,27 +290,27 @@ fn watchValue(session: *const Context, a: A, capture: *WatchCapture, frame: usiz
         c.xrb_expression_find(layout, &r, &context, capture.scope.runtime[1], zjit, frame, capture.expression, raw);
     }
     if (raw.reason != null or raw.count != 1) {
-        capture.diagnostic = try a.dupeZ(u8, if (raw.reason != null) std.mem.span(raw.reason) else "RubyWatchBindingUnavailable");
+        capture.diagnostic = try a.dupeSentinel(u8, if (raw.reason != null) std.mem.span(raw.reason) else "RubyWatchBindingUnavailable", 0);
         return;
     }
     const item = &raw.items[0];
     if (item.reason != null or item.hidden != 0 or item.address == 0) {
-        capture.diagnostic = try a.dupeZ(u8, if (item.reason != null) std.mem.span(item.reason) else "RubyWatchBindingUnavailable");
+        capture.diagnostic = try a.dupeSentinel(u8, if (item.reason != null) std.mem.span(item.reason) else "RubyWatchBindingUnavailable", 0);
         return;
     }
     if (row != null) {
-        capture.expression = try a.dupeZ(u8, std.mem.sliceTo(&item.name, 0));
+        capture.expression = try a.dupeSentinel(u8, std.mem.sliceTo(&item.name, 0), 0);
         if (capture.expression.len == 0 or capture.expression.len > c.XLW_EXPRESSION) return error.RubyWatchNameTooLong;
         capture.scope.frame[2] = 1;
         capture.scope.frame[3] = item.ordinal;
     } else if (capture.scope.frame[2] != 0 and !std.mem.eql(u8, std.mem.sliceTo(&item.name, 0), capture.expression)) {
-        capture.diagnostic = try a.dupeZ(u8, "RubyWatchBindingUnavailable");
+        capture.diagnostic = try a.dupeSentinel(u8, "RubyWatchBindingUnavailable", 0);
         return;
     }
     const sample = try a.create(c.struct_xrb_sample);
     c.xrb_sample_read(layout, &r, item.tagged, sample);
     if (sample.reason != null) {
-        capture.diagnostic = try a.dupeZ(u8, std.mem.span(sample.reason));
+        capture.diagnostic = try a.dupeSentinel(u8, std.mem.span(sample.reason), 0);
         return;
     }
     capture.observation = c.XLW_COMPLETE;
@@ -319,7 +319,7 @@ fn watchValue(session: *const Context, a: A, capture: *WatchCapture, frame: usiz
 pub fn watchExpression(a: A, expression: ?[]const u8, row: ?usize) ![:0]const u8 {
     if ((expression == null) == (row == null)) return error.InvalidArguments;
     if (row) |index| if (index >= 4096) return error.InvalidArguments;
-    return if (expression) |query| try checkedExpression(a, query) else try a.dupeZ(u8, "binding");
+    return if (expression) |query| try checkedExpression(a, query) else try a.dupeSentinel(u8, "binding", 0);
 }
 pub fn createWatch(session: *const Context, a: A, observed: Stack, tid: i32, segment_index: usize, frame: usize, checked_expression: [:0]const u8, row: ?usize) !WatchCapture {
     try session.languages.require(.ruby);
@@ -348,7 +348,7 @@ pub fn observeWatch(session: *const Context, a: A, observed: Stack, scope: c.str
     const module_id = (try runtimeModule(session)).id;
     if (module_id != scope.runtime[0]) {
         capture.scope.runtime[0] = module_id;
-        capture.diagnostic = try a.dupeZ(u8, "RubyWatchRuntimeChanged");
+        capture.diagnostic = try a.dupeSentinel(u8, "RubyWatchRuntimeChanged", 0);
         return capture;
     }
     var saw_runtime = false;
@@ -360,7 +360,7 @@ pub fn observeWatch(session: *const Context, a: A, observed: Stack, scope: c.str
         for (segment.frames, 0..) |frame, index| {
             if (try std.fmt.parseInt(u64, frame.control_frame, 0) != scope.frame[0] or try std.fmt.parseInt(u64, frame.instruction_sequence, 0) != scope.frame[1]) continue;
             if (frame.reason) |why| {
-                capture.diagnostic = try a.dupeZ(u8, why);
+                capture.diagnostic = try a.dupeSentinel(u8, why, 0);
                 return capture;
             }
             try watchValue(session, a, &capture, index, null);
@@ -370,8 +370,8 @@ pub fn observeWatch(session: *const Context, a: A, observed: Stack, scope: c.str
     }
     if (saw_runtime and complete) {
         capture.observation = c.XLW_FRAME_GONE;
-        capture.diagnostic = try a.dupeZ(u8, "RubyWatchFrameGone");
-    } else capture.diagnostic = try a.dupeZ(u8, "RubyWatchFrameNotObserved");
+        capture.diagnostic = try a.dupeSentinel(u8, "RubyWatchFrameGone", 0);
+    } else capture.diagnostic = try a.dupeSentinel(u8, "RubyWatchFrameNotObserved", 0);
     try session.expectGeneration(observed.generation);
     return capture;
 }

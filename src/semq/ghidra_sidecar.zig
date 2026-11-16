@@ -1,22 +1,7 @@
 //! Bounded client for xodb's persistent per-user Ghidra JVM sidecar.
 const std = @import("std");
 const log = @import("../log.zig");
-const c = @cImport({
-    @cUndef("_FORTIFY_SOURCE");
-    @cDefine("_GNU_SOURCE", "1");
-    @cInclude("unistd.h");
-    @cInclude("stdlib.h");
-    @cInclude("fcntl.h");
-    @cInclude("errno.h");
-    @cInclude("poll.h");
-    @cInclude("signal.h");
-    @cInclude("spawn.h");
-    @cInclude("time.h");
-    @cInclude("sys/socket.h");
-    @cInclude("sys/stat.h");
-    @cInclude("sys/un.h");
-    @cInclude("sys/wait.h");
-});
+const c = @import("c_semq_ghidra_sidecar");
 const Allocator = std.mem.Allocator;
 const Value = std.json.Value;
 extern "c" fn connect(c_int, *const c.sockaddr, c.socklen_t) c_int;
@@ -71,14 +56,14 @@ fn nowNs() u64 {
 }
 
 pub fn socketPath(a: Allocator) ![:0]u8 {
-    if (c.getenv("XODB_GHIDRA_SOCKET")) |path| if (path[0] != 0) return a.dupeZ(u8, std.mem.span(path));
+    if (c.getenv("XODB_GHIDRA_SOCKET")) |path| if (path[0] != 0) return a.dupeSentinel(u8, std.mem.span(path), 0);
     if (c.getenv("XDG_RUNTIME_DIR")) |dir| if (dir[0] != 0) return std.fmt.allocPrintSentinel(a, "{s}/.xodb.ghidra.s", .{std.mem.span(dir)}, 0);
     const base = if (c.getenv("TMPDIR")) |dir| if (dir[0] != 0) std.mem.span(dir) else "/tmp" else "/tmp";
     return std.fmt.allocPrintSentinel(a, "{s}/xodb-{d}/.xodb.ghidra.s", .{ base, c.getuid() }, 0);
 }
 
 pub fn starterPath(a: Allocator) !?[:0]u8 {
-    if (c.getenv("XODB_GHIDRA_SIDECAR")) |path| if (path[0] != 0) return if (c.access(path, c.X_OK) == 0) try a.dupeZ(u8, std.mem.span(path)) else null;
+    if (c.getenv("XODB_GHIDRA_SIDECAR")) |path| if (path[0] != 0) return if (c.access(path, c.X_OK) == 0) try a.dupeSentinel(u8, std.mem.span(path), 0) else null;
     // Never the current directory: the starter is found from where this
     // executable lives (beside it, an installed share directory, or the
     // source tree a zig-out/bin build sits in).
@@ -337,7 +322,7 @@ fn dropOwned(pid: c.pid_t) void {
 
 fn taskZombie(pid: c.pid_t) bool {
     var path_buf: [64]u8 = undefined;
-    const path = std.fmt.bufPrintZ(&path_buf, "/proc/{d}/stat", .{pid}) catch return false;
+    const path = std.fmt.bufPrintSentinel(&path_buf, "/proc/{d}/stat", .{pid}, 0) catch return false;
     const fd = c.open(path.ptr, c.O_RDONLY | c.O_CLOEXEC);
     if (fd < 0) return false;
     defer _ = c.close(fd);

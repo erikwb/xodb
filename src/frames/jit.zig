@@ -9,7 +9,7 @@ pub const Clock = struct {
     scope: ?[]const u8 = null,
     pub fn toC(self: Clock) !c.struct_xodb_jit_clock {
         var out = std.mem.zeroes(c.struct_xodb_jit_clock);
-        out.kind = @intFromEnum(self.kind);
+        out.kind = @backingInt(self.kind);
         if (self.scope) |scope| {
             out.scope = try hexId(scope);
             out.scope_known = 1;
@@ -51,7 +51,7 @@ pub const Declaration = struct {
         }
         out.clock = try self.clock.toC();
         out.map.target = try self.target_clock.toC();
-        out.map.method = @intFromEnum(self.mapping);
+        out.map.method = @backingInt(self.mapping);
         out.map.offset = self.offset;
         out.map.mult = self.mult;
         out.map.shift = self.shift;
@@ -78,7 +78,7 @@ pub const Declaration = struct {
 };
 fn boundedZ(a: std.mem.Allocator, s: []const u8) ![:0]const u8 {
     if (s.len > 4096 or std.mem.indexOfScalar(u8, s, 0) != null) return error.JitMetadataInvalid;
-    return a.dupeZ(u8, s);
+    return a.dupeSentinel(u8, s, 0);
 }
 pub fn hexId(s: []const u8) ![16]u8 {
     if (s.len != 32 and s.len != 36) return error.JitIdentityInvalid;
@@ -270,10 +270,16 @@ fn resolve(a: std.mem.Allocator, model: *const c.struct_xodb_jit_model, sources:
 }
 
 pub const Summary = struct {
-    raw_pc: u64, lookup_pc: u64, outcome: []const u8, resolver_outcome: []const u8,
-    read_stability: []const u8, reasons: u32, total_candidates: usize, total_exact: bool,
+    raw_pc: u64,
+    lookup_pc: u64,
+    outcome: []const u8,
+    resolver_outcome: []const u8,
+    read_stability: []const u8,
+    reasons: u32,
+    total_candidates: usize,
+    total_exact: bool,
 };
 pub fn summary(label: ?Label) ?Summary {
     const l = label orelse return null;
-    return .{ .raw_pc=l.raw_pc, .lookup_pc=l.lookup_pc, .outcome=l.outcome, .resolver_outcome=l.resolver_outcome, .read_stability=l.read_stability, .reasons=l.reasons, .total_candidates=l.total_candidates, .total_exact=l.total_exact };
+    return .{ .raw_pc = l.raw_pc, .lookup_pc = l.lookup_pc, .outcome = l.outcome, .resolver_outcome = l.resolver_outcome, .read_stability = l.read_stability, .reasons = l.reasons, .total_candidates = l.total_candidates, .total_exact = l.total_exact };
 }

@@ -3,15 +3,7 @@ const std = @import("std");
 const linux = @import("../target/linux.zig");
 const identity = @import("process_identity.zig");
 const kernel_aware = @import("kernel_aware.zig");
-const c = @cImport({
-    @cUndef("_FORTIFY_SOURCE");
-    @cDefine("_GNU_SOURCE", "1");
-    @cInclude("fcntl.h");
-    @cInclude("unistd.h");
-    @cInclude("sys/stat.h");
-    @cInclude("sys/syscall.h");
-    @cInclude("linux/openat2.h");
-});
+const c = @import("c_model_compatibility");
 
 pub const Info = struct {
     kind: enum { unknown, not_detected, wine, unavailable } = .unknown,
@@ -62,7 +54,7 @@ fn basename(path: []const u8) []const u8 {
 pub fn protonRoot(path: []const u8) ?[]const u8 {
     const at = std.mem.indexOf(u8, path, "/files/lib/") orelse std.mem.indexOf(u8, path, "/files/lib64/") orelse std.mem.indexOf(u8, path, "/dist/lib/") orelse return null;
     const root = path[0..at];
-    return if (root.len > 0 and std.ascii.indexOfIgnoreCase(basename(root), "proton") != null) root else null;
+    return if (root.len > 0 and std.ascii.findIgnoreCase(basename(root), "proton") != null) root else null;
 }
 
 fn readFile(path: [:0]const u8, out: []u8) ?[]const u8 {
@@ -76,7 +68,7 @@ fn readFile(path: [:0]const u8, out: []u8) ?[]const u8 {
 fn startTicks(pid: i32) ?u64 {
     var path: [64]u8 = undefined;
     var bytes: [4096]u8 = undefined;
-    const name = std.fmt.bufPrintZ(&path, "/proc/{d}/stat", .{pid}) catch return null;
+    const name = std.fmt.bufPrintSentinel(&path, "/proc/{d}/stat", .{pid}, 0) catch return null;
     return identity.parse(readFile(name, &bytes) orelse return null) catch null;
 }
 fn safeName(out: []u8, bytes: []const u8) void {
@@ -100,11 +92,11 @@ fn safeName(out: []u8, bytes: []const u8) void {
 fn version(pid: i32, root: []const u8, out: *[96]u8) void {
     if (!std.fs.path.isAbsolute(root)) return;
     var path: [4096]u8 = undefined;
-    const proc = std.fmt.bufPrintZ(&path, "/proc/{d}/root", .{pid}) catch return;
+    const proc = std.fmt.bufPrintSentinel(&path, "/proc/{d}/root", .{pid}, 0) catch return;
     const fd = c.open(proc.ptr, c.O_PATH | c.O_DIRECTORY | c.O_CLOEXEC);
     if (fd < 0) return;
     defer _ = c.close(fd);
-    const relative = std.fmt.bufPrintZ(&path, "{s}/version", .{std.mem.trimStart(u8, root, "/")}) catch return;
+    const relative = std.fmt.bufPrintSentinel(&path, "{s}/version", .{std.mem.trimStart(u8, root, "/")}, 0) catch return;
     const how = std.mem.zeroInit(c.struct_open_how, .{ .flags = c.O_PATH | c.O_CLOEXEC, .resolve = c.RESOLVE_IN_ROOT | c.RESOLVE_NO_SYMLINKS | c.RESOLVE_NO_MAGICLINKS });
     const opened = c.syscall(c.SYS_openat2, fd, relative.ptr, &how, @as(c_ulong, @sizeOf(c.struct_open_how)));
     if (opened < 0) return;
@@ -112,7 +104,7 @@ fn version(pid: i32, root: []const u8, out: *[96]u8) void {
     defer _ = c.close(file);
     var stat: c.struct_stat = undefined;
     if (c.fstat(file, &stat) != 0 or stat.st_mode & c.S_IFMT != c.S_IFREG or stat.st_size <= 0 or stat.st_size > 4096) return;
-    const pinned = std.fmt.bufPrintZ(&path, "/proc/self/fd/{d}", .{file}) catch return;
+    const pinned = std.fmt.bufPrintSentinel(&path, "/proc/self/fd/{d}", .{file}, 0) catch return;
     const reader = c.open(pinned.ptr, c.O_RDONLY | c.O_CLOEXEC | c.O_NONBLOCK);
     if (reader < 0) return;
     defer _ = c.close(reader);
@@ -120,7 +112,7 @@ fn version(pid: i32, root: []const u8, out: *[96]u8) void {
     const n = c.read(reader, &bytes, bytes.len);
     if (n <= 0 or n >= bytes.len) return;
     const line = std.mem.trim(u8, std.mem.sliceTo(bytes[0..@intCast(n)], '\n'), "\r \t");
-    if (line.len >= out.len or std.ascii.indexOfIgnoreCase(line, "proton") == null) return;
+    if (line.len >= out.len or std.ascii.findIgnoreCase(line, "proton") == null) return;
     safeName(out, line);
 }
 
@@ -261,7 +253,7 @@ pub const Cache = struct {
         for (self.labels.items[self.cursor..end]) |*row| {
             var path: [96]u8 = undefined;
             var bytes: [32]u8 = undefined;
-            const name = std.fmt.bufPrintZ(&path, "/proc/{d}/task/{d}/comm", .{ snap.pid, row.tid }) catch continue;
+            const name = std.fmt.bufPrintSentinel(&path, "/proc/{d}/task/{d}/comm", .{ snap.pid, row.tid }, 0) catch continue;
             const raw = readFile(name, &bytes);
             var next = Label{ .id = row.id, .tid = row.tid };
             if (raw) |text| {

@@ -6,7 +6,7 @@ const perf = @import("linux_perf.zig");
 const records = @import("records.zig");
 const Arch = @import("../target/arch.zig").Arch;
 pub fn perfFile(arch: Arch) ?records.PerfFile {
-    return records.perfFile(@intFromEnum(arch));
+    return records.perfFile(@backingInt(arch));
 }
 pub fn requireSyscallTiming(arch: Arch) !void {
     switch (arch) {
@@ -140,7 +140,7 @@ pub const Stop = enum { collecting, manual, duration, capacity, mapping_limit, m
 pub const SummaryStatus = enum { collecting, manual, duration, capacity, mapping_limit, mappings_changed, metadata_lost, thread_scope_changed, decode_error, target_ended, image_changed, drain_limit, collector_error, scheduling_limit, scheduling_error, syscall_limit, syscall_error, partial };
 fn summaryStatus(status: Stop, syscall_lost: u64) SummaryStatus {
     if (status != .collecting and syscall_lost > 0) return .partial;
-    return @enumFromInt(@intFromEnum(status));
+    return @fromBackingInt(@intCast(@backingInt(status)));
 }
 /// A partial summary keeps why it is partial and how collection ended. An
 /// existing diagnostic already explains the stop and is kept unchanged.
@@ -244,7 +244,7 @@ pub const Capture = struct {
     status: Stop = .collecting,
     // Unique exceptional conditions, in observation order (rings are not
     // globally time ordered). The first remains the primary stop reason.
-    stop_reasons: [@typeInfo(Stop).@"enum".fields.len]Stop = undefined,
+    stop_reasons: [@typeInfo(Stop).@"enum".field_names.len]Stop = undefined,
     stop_reason_count: usize = 0,
     failure: ?perf.Failure = null,
     diagnostic: []const u8 = "",
@@ -370,7 +370,7 @@ pub const Capture = struct {
                 for (debugger_ids[0..opened_threads], 0..) |debugger_id, i| {
                     self.threads[i] = .{ .debugger_id = debugger_id, .perf = collector.thread(i).? };
                     self.cpu_before[i] = activity.readTarget(@ptrCast(target), pid, config.tids[i]);
-                    _ = std.fmt.bufPrintZ(&self.thread_names[i], "Thread {d}", .{config.tids[i]}) catch unreachable;
+                    _ = std.fmt.bufPrintSentinel(&self.thread_names[i], "Thread {d}", .{config.tids[i]}, 0) catch unreachable;
                 }
                 // A remote target's /proc is on another host. Its empty
                 // recorder still gives the archive a well-formed ECTX.
@@ -409,7 +409,7 @@ pub const Capture = struct {
             };
             self.threads[i] = .{ .debugger_id = collector.debuggerId(i), .perf = thread, .enrolled_ns = collector.enrolledAt(i) orelse now };
             self.cpu_before[i] = activity.readTarget(@ptrCast(self.images.target), self.pid, thread.tid);
-            _ = std.fmt.bufPrintZ(&self.thread_names[i], "Thread {d}", .{thread.tid}) catch unreachable;
+            _ = std.fmt.bufPrintSentinel(&self.thread_names[i], "Thread {d}", .{thread.tid}, 0) catch unreachable;
             self.thread_count += 1;
             self.revision += 1;
         }
@@ -436,7 +436,7 @@ pub const Capture = struct {
         const i = self.thread_count;
         self.threads[i] = .{ .debugger_id = debugger_id, .perf = collector.thread(i).?, .enrolled_ns = now };
         self.cpu_before[i] = activity.readTarget(@ptrCast(self.images.target), self.pid, tid);
-        _ = std.fmt.bufPrintZ(&self.thread_names[i], "Thread {d}", .{tid}) catch unreachable;
+        _ = std.fmt.bufPrintSentinel(&self.thread_names[i], "Thread {d}", .{tid}, 0) catch unreachable;
         self.thread_count += 1;
         self.accepted.threads = @intCast(self.thread_count);
         self.revision += 1;
@@ -1059,7 +1059,7 @@ pub const Capture = struct {
         const bytes = @min(mapping.len - offset, frame_.lookup_address - frame_.address + 128);
         const disasm = @import("../model/disassembly.zig");
         const decoded = try a.alloc(disasm.Instruction, 4096);
-        const count = try disasm.decodeFor(@enumFromInt(@intFromEnum(image.image.header.machine)), mapping[offset..][0..bytes], frame_.address, decoded);
+        const count = try disasm.decodeFor(@fromBackingInt(@intCast(@backingInt(image.image.header.machine))), mapping[offset..][0..bytes], frame_.address, decoded);
         var first: usize = 0;
         for (decoded[0..count], 0..) |instruction, i| {
             if (instruction.address <= frame_.lookup_address) first = i;
@@ -1188,7 +1188,7 @@ pub const Capture = struct {
             const kernel_only = chain.count == 0 and kernel.count > 0 and sample.callchain == .complete and !chain.omitted_context and !unmapped_caller;
             if (!kernel_only and (sample.callchain != .complete or chain.count <= 1 or chain.omitted_context or unmapped_caller)) {
                 result.partial_samples += 1;
-                path[count] = .{ .kind = .incomplete, .address = if (unmapped_caller) 4 else @as(u64, @intFromEnum(sample.callchain)) + 1, .name = if (unmapped_caller) "[unmapped caller / partial]" else if (sample.callchain == .truncated) "[truncated callers]" else "[callers unavailable / partial]" };
+                path[count] = .{ .kind = .incomplete, .address = if (unmapped_caller) 4 else @as(u64, @backingInt(sample.callchain)) + 1, .name = if (unmapped_caller) "[unmapped caller / partial]" else if (sample.callchain == .truncated) "[truncated callers]" else "[callers unavailable / partial]" };
                 count += 1;
             }
             var index = chain.count;
@@ -1683,7 +1683,7 @@ fn plantCapture(a: std.mem.Allocator, tid: i32) !*Capture {
     const capture = try a.create(Capture);
     capture.* = .{ .allocator = a, .arena = std.heap.ArenaAllocator.init(a), .id = 1, .session_id = 1, .generation = 0, .image_epoch = 0, .pid = 1, .started_ns = 1000, .config = .{}, .accepted = std.mem.zeroes(perf.Acceptance), .thread_count = 1, .collector = null, .images = modules.Modules.init(a), .trusted_before_ns = 0 };
     capture.threads[0] = .{ .debugger_id = 1, .perf = .{ .tid = tid, .event_id = 1, .start_time_ticks = 1, .start_time_known = true } };
-    _ = try std.fmt.bufPrintZ(&capture.thread_names[0], "Thread {d}", .{tid});
+    _ = try std.fmt.bufPrintSentinel(&capture.thread_names[0], "Thread {d}", .{tid}, 0);
     return capture;
 }
 
@@ -1870,7 +1870,7 @@ test "a run-queue wait is its own node and a clipped range scales the merged spa
 test "hidden kallsyms labels kernel frames without failing the capture" {
     const a = std.testing.allocator;
     var name_buf: [96]u8 = undefined;
-    const name = std.fmt.bufPrintZ(&name_buf, ".zig-cache/kallsyms-{d}", .{std.c.getpid()}) catch unreachable;
+    const name = std.fmt.bufPrintSentinel(&name_buf, ".zig-cache/kallsyms-{d}", .{std.c.getpid()}, 0) catch unreachable;
     const text = "ffffffff81000100 T vfs_read\n";
     const fd = std.c.open(name.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true, .CLOEXEC = true }, @as(std.c.mode_t, 0o644));
     try std.testing.expect(fd >= 0);
@@ -1936,7 +1936,7 @@ test "maximum capture and mapping budgets preserve counts and bound identity sto
     capture.* = .{ .allocator = a, .arena = std.heap.ArenaAllocator.init(a), .id = 1, .session_id = 1, .generation = 0, .image_epoch = 0, .pid = 1, .started_ns = 1, .config = .{}, .accepted = undefined, .thread_count = 1, .collector = null, .images = modules.Modules.init(a) };
     defer capture.deinit();
     capture.threads[0] = .{ .debugger_id = 1, .perf = .{ .tid = 1, .event_id = 1, .start_time_ticks = 1, .start_time_known = true } };
-    _ = try std.fmt.bufPrintZ(&capture.thread_names[0], "Thread 1", .{});
+    _ = try std.fmt.bufPrintSentinel(&capture.thread_names[0], "Thread 1", .{}, 0);
     for (0..mappings.max_opening) |i| {
         const start = 4096 + i * 64;
         try capture.history.opening(a, .{ .start = start, .end = start + 48 });
@@ -1986,7 +1986,7 @@ test "CPU timeline and flames share filters, invalid sample handling, and final-
     defer capture.deinit();
     for (0..2) |i| {
         capture.threads[i] = .{ .debugger_id = i + 10, .perf = .{ .tid = @intCast(i + 1), .event_id = i + 1, .start_time_ticks = 1, .start_time_known = true } };
-        _ = try std.fmt.bufPrintZ(&capture.thread_names[i], "Thread {d}", .{i + 1});
+        _ = try std.fmt.bufPrintSentinel(&capture.thread_names[i], "Thread {d}", .{i + 1}, 0);
     }
     for ([_]u64{ 100, 109, 110, 150, 199, 200 }, 0..) |time, i| {
         try capture.samples.append(a, .{ .ip = 4096, .ip_present = true, .tid = @intCast(1 + i % 2), .tid_present = true, .time_ns = time, .time_present = true, .cpu_mode = .user });

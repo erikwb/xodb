@@ -392,11 +392,11 @@ fn summary(v: *View, ctx: Ctx, rect: Rect, s: *const m.Snapshot, now: u64) !void
     }
     {
         const inner = try card(ctx, .{ .x = rect.x + hw + gap, .y = mid_y, .w = hw, .h = mid_h }, "Disk throughput", "read ▲  write ▼");
-        try graph(v, ctx, inner, &.{ .{ .ring = &H.disk_read, .color = p.accent, .label = "read" }, .{ .ring = &H.disk_write, .color = p.accent2, .label = "write", .sign = -1 } }, .{ .kind = .rate, .scale = &H.scales[@intFromEnum(vw.ScaleId.disk_total)], .mirrored = true, .reason = s.group(.disks).reason }, now);
+        try graph(v, ctx, inner, &.{ .{ .ring = &H.disk_read, .color = p.accent, .label = "read" }, .{ .ring = &H.disk_write, .color = p.accent2, .label = "write", .sign = -1 } }, .{ .kind = .rate, .scale = &H.scales[@backingInt(vw.ScaleId.disk_total)], .mirrored = true, .reason = s.group(.disks).reason }, now);
     }
     {
         const inner = try card(ctx, .{ .x = rect.x + 2 * (hw + gap), .y = mid_y, .w = hw, .h = mid_h }, "Network", "receive ▲  send ▼");
-        try graph(v, ctx, inner, &.{ .{ .ring = &H.net_rx, .color = p.accent3, .label = "rx" }, .{ .ring = &H.net_tx, .color = p.accent2, .label = "tx", .sign = -1 } }, .{ .kind = .rate, .scale = &H.scales[@intFromEnum(vw.ScaleId.net_total)], .mirrored = true, .reason = if (s.group(.network).status != .ok) s.group(.network).reason else if (s.net_rx_bps.get() == null) s.net_rx_bps.reason else s.net_tx_bps.reason }, now);
+        try graph(v, ctx, inner, &.{ .{ .ring = &H.net_rx, .color = p.accent3, .label = "rx" }, .{ .ring = &H.net_tx, .color = p.accent2, .label = "tx", .sign = -1 } }, .{ .kind = .rate, .scale = &H.scales[@backingInt(vw.ScaleId.net_total)], .mirrored = true, .reason = if (s.group(.network).status != .ok) s.group(.network).reason else if (s.net_rx_bps.get() == null) s.net_rx_bps.reason else s.net_tx_bps.reason }, now);
     }
     // Bottom row: top processes, facts, and the honesty card.
     const low_y = mid_y + mid_h + gap;
@@ -514,9 +514,9 @@ fn honesty(v: *View, ctx: Ctx, inner: Rect, s: *const m.Snapshot) !void {
             }
         }
     }.f;
-    inline for (std.meta.fields(m.Group), 0..) |g, i| {
+    inline for (@typeInfo(m.Group).@"enum".field_names, 0..) |g_name, i| {
         const st = s.groups[i];
-        if (st.status != .ok and !std.mem.eql(u8, st.reason, "not collected")) add(&list, &count, g.name, if (st.detail.len > 0) st.detail else st.reason);
+        if (st.status != .ok and !std.mem.eql(u8, st.reason, "not collected")) add(&list, &count, g_name, if (st.detail.len > 0) st.detail else st.reason);
     }
     if (s.cpu_package_power.get() == null) add(&list, &count, if (s.cpu_power_label.len > 0) s.cpu_power_label else if (std.mem.eql(u8, s.cpu_package_power.reason, "not supported")) "CPU power" else "CPU package power", s.cpu_package_power.reason);
     if (s.cpu_package_temp.get() == null) add(&list, &count, if (s.cpu_temp_label.len > 0) s.cpu_temp_label else "CPU temperature", s.cpu_package_temp.reason);
@@ -810,7 +810,7 @@ fn processes(v: *View, ctx: Ctx, rect: Rect, s: *const m.Snapshot, now: u64) !vo
         x += ctx.measure("sort") + 8;
     }
     for (vw.sort_names, 0..) |name, i| {
-        const sort: vw.Sort = @enumFromInt(i);
+        const sort: vw.Sort = @fromBackingInt(@intCast(i));
         const on = v.sort == sort;
         var nb: [24]u8 = undefined;
         const label = if (on) std.fmt.bufPrint(&nb, "{s} {s}", .{ name, if (v.descending) "▼" else "▲" }) catch name else name;
@@ -878,7 +878,7 @@ fn processes(v: *View, ctx: Ctx, rect: Rect, s: *const m.Snapshot, now: u64) !vo
     const row_h: f32 = 24;
     const body = Rect{ .x = table.x, .y = table.y + 34, .w = table.w, .h = table.h - 38 };
     v.visible_rows = @max(1, @as(usize, @intFromFloat(@max(0, (body.h - 22) / row_h))));
-    const top = &v.scroll[@intFromEnum(vw.Panel.processes)];
+    const top = &v.scroll[@backingInt(vw.Panel.processes)];
     // A numeric search keeps ancestors, which can fill the pane and hide the
     // match. Keep that pid on screen without moving the selection.
     if (v.search_len > 0) {
@@ -1248,7 +1248,7 @@ fn disks(v: *View, ctx: Ctx, rect: Rect, s: *const m.Snapshot, now: u64) !void {
     const rows = (n + cols - 1) / cols;
     const ch = @max(200, (rect.h - gap * @as(f32, @floatFromInt(rows - 1))) / @as(f32, @floatFromInt(rows)));
     const cw = (rect.w - gap * @as(f32, @floatFromInt(cols - 1))) / @as(f32, @floatFromInt(cols));
-    const first = v.scroll[@intFromEnum(vw.Panel.disk)] * cols;
+    const first = v.scroll[@backingInt(vw.Panel.disk)] * cols;
     for (s.disks, 0..) |d, i| {
         if (i < first) continue;
         const k = i - first;
@@ -1300,7 +1300,7 @@ fn diskSpace(v: *View, ctx: Ctx, rect: Rect, s: *const m.Snapshot) !void {
     if (s.mounts.len == 0) return missing(v, ctx, inner.x, inner.y, inner.w, if (s.group(.filesystems).status != .ok) s.group(.filesystems).reason else "no filesystems");
     const row_h: f32 = 48;
     var y = inner.y;
-    const first = @min(v.scroll[@intFromEnum(vw.Panel.disk_space)], s.mounts.len -| 1);
+    const first = @min(v.scroll[@backingInt(vw.Panel.disk_space)], s.mounts.len -| 1);
     for (s.mounts[first..]) |mount| {
         if (y + row_h > inner.y + inner.h) break;
         const path = v.mountPath(mount.path);
@@ -1353,7 +1353,7 @@ fn network(v: *View, ctx: Ctx, rect: Rect, s: *const m.Snapshot, now: u64) !void
     };
     if (n == 0) return missing(v, ctx, rect.x, rect.y, rect.w, if (s.group(.network).status != .ok) s.group(.network).reason else "no interfaces");
     const ch: f32 = @max(190, @min(260, (rect.h - gap * @as(f32, @floatFromInt(@min(n, 3) - 1))) / @as(f32, @floatFromInt(@min(n, 3)))));
-    const first = @min(v.scroll[@intFromEnum(vw.Panel.network)], n - 1);
+    const first = @min(v.scroll[@backingInt(vw.Panel.network)], n - 1);
     var y = rect.y;
     for (shown[first..n]) |i| {
         if (y + 120 > rect.y + rect.h) break;
@@ -1423,7 +1423,7 @@ fn connections(v: *View, ctx: Ctx, rect: Rect, s: *const m.Snapshot) !void {
     }
     try ctx.r.rect(.{ .x = inner.x, .y = hy + 24, .w = inner.w, .h = 1 }, p.border);
     var y = hy + 30;
-    const first = @min(v.scroll[@intFromEnum(vw.Panel.connections)], s.connections.len -| 1);
+    const first = @min(v.scroll[@backingInt(vw.Panel.connections)], s.connections.len -| 1);
     for (s.connections[first..], 0..) |c, i| {
         if (y + line_h > inner.y + inner.h or ctx.r.used() > 0.85) break;
         if (i % 2 == 1) try ctx.r.rect(.{ .x = inner.x - 4, .y = y, .w = inner.w + 8, .h = line_h }, fade(p.grid, 0.5));
@@ -1519,7 +1519,7 @@ fn power(v: *View, ctx: Ctx, rect: Rect, s: *const m.Snapshot, now: u64) !void {
     const sensor_rows = (s.sensors.len + cols - 1) / cols;
     const th: f32 = std.math.clamp((inner.h - 8 * @as(f32, @floatFromInt(sensor_rows - 1))) / @as(f32, @floatFromInt(sensor_rows)), 92, 170);
     const tile_w = (inner.w - 8 * @as(f32, @floatFromInt(cols - 1))) / @as(f32, @floatFromInt(cols));
-    const first = @min(v.scroll[@intFromEnum(vw.Panel.power)] * cols, s.sensors.len -| 1);
+    const first = @min(v.scroll[@backingInt(vw.Panel.power)] * cols, s.sensors.len -| 1);
     for (s.sensors[first..], 0..) |sensor, k| {
         const tile = Rect{ .x = inner.x + @as(f32, @floatFromInt(k % cols)) * (tile_w + 8), .y = inner.y + @as(f32, @floatFromInt(k / cols)) * (th + 8), .w = tile_w, .h = th };
         if (tile.y + th > inner.y + inner.h or ctx.r.used() > 0.85) break;
@@ -1650,9 +1650,9 @@ fn system(v: *View, ctx: Ctx, rect: Rect, s: *const m.Snapshot) !void {
         try ctx.text(inner.x + 130, y, "State", p.dim);
         try ctx.textRight(inner.x + inner.w, y, "Cost", p.dim);
         y += line_h + 4;
-        inline for (std.meta.fields(m.Group), 0..) |g, i| {
+        inline for (@typeInfo(m.Group).@"enum".field_names, 0..) |g_name, i| {
             const st = s.groups[i];
-            try ctx.text(inner.x, y, g.name, p.text);
+            try ctx.text(inner.x, y, g_name, p.text);
             if (st.status == .ok) try ctx.text(inner.x + 130, y, "ok", p.ok) else try missing(v, ctx, inner.x + 130, y, inner.w - 240, if (st.detail.len > 0) st.detail else st.reason);
             if (st.cost_ns) |ns| {
                 var cb: [24]u8 = undefined;
@@ -1753,7 +1753,7 @@ fn services(v: *View, ctx: Ctx, rect: Rect, s: *const m.Snapshot) !void {
         if (s.group(.services).status == .ok) try ctx.textFit(inner.x, y, inner.w, "No matching daemon processes observed", p.dim);
         return;
     }
-    const first = @min(v.scroll[@intFromEnum(vw.Panel.services)], s.services.len - 1);
+    const first = @min(v.scroll[@backingInt(vw.Panel.services)], s.services.len - 1);
     for (s.services[first..]) |svc| {
         if (y + 48 > inner.y + inner.h) break;
         var pid: [32]u8 = undefined;
@@ -1804,7 +1804,7 @@ fn apps(v: *View, ctx: Ctx, rect: Rect, s: *const m.Snapshot) !void {
     var max: f64 = 1;
     for (s.packages) |pk| max = @max(max, @as(f64, @floatFromInt(pk.size.get() orelse 0)));
     var y = inner.y;
-    const first = @min(v.scroll[@intFromEnum(vw.Panel.apps)], s.packages.len -| 1);
+    const first = @min(v.scroll[@backingInt(vw.Panel.apps)], s.packages.len -| 1);
     for (s.packages[first..]) |pk| {
         if (y + line_h > inner.y + inner.h) break;
         // Size owns a whole cell; the decorative bar gives way first.
@@ -1881,7 +1881,7 @@ fn fetchCard(v: *View, ctx: Ctx, rect: Rect, s: *const m.Snapshot, now: u64) !vo
     // One row stays for the "more" note when the lines do not all fit.
     var fits: usize = @intFromFloat(@max(0, @floor(avail / row_h)));
     if (fits < fs.lines.len) fits -|= 1;
-    const scroll = &v.scroll[@intFromEnum(vw.Panel.fetch)];
+    const scroll = &v.scroll[@backingInt(vw.Panel.fetch)];
     scroll.* = @min(scroll.*, fs.lines.len -| fits);
     var cpu_spark: Rect = .{ .x = 0, .y = 0, .w = 0, .h = 0 };
     for (fs.lines[scroll.*..][0..@min(fits, fs.lines.len - scroll.*)]) |l| {
@@ -2208,7 +2208,7 @@ fn radioStrip(v: *View, ctx: Ctx, box: Rect, plot_x: f32, plot_w: f32, t: u64) !
             .frames => " frames/s",
         };
         const pct = st.metric == .busy or st.metric == .retry;
-        v.hover(plot, "channel {d} ({d} MHz) {d:.1} s ago: {s} {d:.1}{s}{s}{s}", .{ hv.c, rp.sweep.channelMhz(@intCast(hv.c)), hv.ago, rp.metric_names[@intFromEnum(st.metric)], if (hv.v) |x| (if (pct) x * 100 else x) else 0, if (pct) "%" else unit, if (hv.carried) " (last measured value: the sweep was elsewhere)" else "", if (hv.v == null) " (not measured)" else "" });
+        v.hover(plot, "channel {d} ({d} MHz) {d:.1} s ago: {s} {d:.1}{s}{s}{s}", .{ hv.c, rp.sweep.channelMhz(@intCast(hv.c)), hv.ago, rp.metric_names[@backingInt(st.metric)], if (hv.v) |x| (if (pct) x * 100 else x) else 0, if (pct) "%" else unit, if (hv.carried) " (last measured value: the sweep was elsewhere)" else "", if (hv.v == null) " (not measured)" else "" });
     } else v.hover(plot, "Channels 1-14 at their true centres; each lane is the channel's 22 MHz mask measured by the window centred nearest it. Faded cells carry the last value while the sweep is elsewhere.", .{});
 }
 
@@ -2231,10 +2231,10 @@ fn radioChips(v: *View, ctx: Ctx, box: Rect) !void {
         const w = ctx.measure(name) + 12;
         if (x + w > box.x + box.w - 110) break;
         const r = Rect{ .x = x, .y = y - 1, .w = w, .h = 20 };
-        const on = @intFromEnum(st.metric) == i;
+        const on = @backingInt(st.metric) == i;
         try ctx.r.rect(r, if (on) draw.fade(p.accent, 0.3) else draw.fade(p.grid, 0.4));
         try ctx.text(x + 6, y, name, if (on) p.text else p.dim);
-        v.hit(r, .{ .radio = .{ .metric = @enumFromInt(i) } });
+        v.hit(r, .{ .radio = .{ .metric = @fromBackingInt(@intCast(i)) } });
         x += w + 4;
     };
     const label = if (st.mode == .channels) "waterfall" else "channels";

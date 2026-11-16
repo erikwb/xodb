@@ -59,8 +59,8 @@ pub fn Owned(comptime T: type) type {
     return switch (@typeInfo(T)) {
         .pointer => |p| if (p.child == u8) ?[]const u8 else @compileError("unowned C pointer"),
         .@"struct" => |s| blk: {
-            var types: [s.fields.len]type = undefined;
-            for (s.fields, 0..) |f, i| types[i] = Owned(f.type);
+            var types: [s.field_names.len]type = undefined;
+            for (s.field_types, 0..) |f_type, i| types[i] = Owned(f_type);
             break :blk @Struct(.auto, null, std.meta.fieldNames(T), &types, &@splat(.{}));
         },
         else => T,
@@ -85,7 +85,7 @@ pub fn ownBounded(a: std.mem.Allocator, value: anytype, max_string: usize) !Owne
         .pointer => return if (value == null) null else try a.dupe(u8, preview(std.mem.span(value), max_string)),
         .@"struct" => |s| {
             var out: Owned(T) = undefined;
-            inline for (s.fields) |f| @field(out, f.name) = try ownBounded(a, @field(value, f.name), max_string);
+            inline for (s.field_names) |f_name| @field(out, f_name) = try ownBounded(a, @field(value, f_name), max_string);
             return out;
         },
         else => return value,
@@ -193,7 +193,7 @@ pub const Source = struct {
             }
             self.peak = @max(self.peak, self.retained() + self.doc_owner.?.decode_peak_bytes);
             try self.charge(self.doc_owner.?.retained_bytes);
-        } else if (@intFromEnum(self.kind) <= @intFromEnum(Kind.coroutines)) {
+        } else if (@backingInt(self.kind) <= @backingInt(Kind.coroutines)) {
             var limits: c.struct_jvm_evidence_limits = undefined;
             c.jvm_evidence_default_limits(&limits);
             limits.max_total_bytes = self.remaining();
@@ -204,7 +204,7 @@ pub const Source = struct {
                 selection.has_kind = 1;
                 selection.kind = kind;
             }
-            try check(c.jvm_evidence_import_bytes(self.input.bytes, self.input.size, "retained source", @intFromEnum(self.kind) - 2, &selection, &limits, cancel, &self.jvm_owner, &err));
+            try check(c.jvm_evidence_import_bytes(self.input.bytes, self.input.size, "retained source", @backingInt(self.kind) - 2, &selection, &limits, cancel, &self.jvm_owner, &err));
             var usage: c.struct_jvm_evidence_usage = undefined;
             c.jvm_evidence_usage(self.jvm_owner, &usage);
             self.peak = @max(self.peak, self.retained() + usage.whole_peak);
@@ -226,7 +226,7 @@ pub const Source = struct {
         var hash = std.crypto.hash.sha2.Sha256.init(.{});
         hash.update(self.input.sha256[0..64]);
         var key: [8]u8 = undefined;
-        std.mem.writeInt(u32, key[0..4], @intFromEnum(self.kind), .little);
+        std.mem.writeInt(u32, key[0..4], @backingInt(self.kind), .little);
         std.mem.writeInt(u32, key[4..8], self.metadata.jvm_kind orelse c.XLF_NONE, .little);
         hash.update(&key);
         if (self.metadata.jit) |meta| {

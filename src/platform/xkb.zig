@@ -12,15 +12,7 @@
 
 const std = @import("std");
 const log = @import("../log.zig");
-const c = @cImport({
-    @cDefine("_GNU_SOURCE", "1");
-    @cInclude("unistd.h");
-    @cInclude("sys/mman.h");
-    @cInclude("xkbcommon/xkbcommon.h");
-    @cInclude("xkbcommon/xkbcommon-compose.h");
-    @cInclude("malloc.h"); // mallinfo2 and stdio are used only by the leak test
-    @cInclude("stdio.h");
-});
+const c = @import("c_platform_xkb");
 const input = @import("input.zig");
 const capacity = input.capacity;
 const Mods = input.Mods;
@@ -46,7 +38,7 @@ pub const Keyboard = struct {
 
     focused: bool = false,
     /// Authoritative state survives queue overflow; repeats never change it.
-    held: std.StaticBitSet(768) = .initEmpty(),
+    held: std.StaticBitSet(768) = .empty,
     focus_revision: u64 = 0,
     repeat_rate: i32 = 0,
     repeat_delay_ms: i32 = 0,
@@ -80,7 +72,7 @@ pub const Keyboard = struct {
     }
 
     fn clearHeld(self: *Keyboard) void {
-        self.held = .initEmpty();
+        self.held = .empty;
         self.focus_revision +%= 1;
     }
 

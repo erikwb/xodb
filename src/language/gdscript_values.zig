@@ -121,21 +121,21 @@ const kind_names = [_]struct { [*:0]const u8, []const u8 }{
 };
 pub const kind_count = kind_names.len;
 comptime {
-    std.debug.assert(specs.len == @typeInfo(F).@"enum".fields.len and type_names.len == @typeInfo(Type).@"enum".fields.len and kind_names.len == @typeInfo(Kind).@"enum".fields.len);
+    std.debug.assert(specs.len == @typeInfo(F).@"enum".field_names.len and type_names.len == @typeInfo(Type).@"enum".field_names.len and kind_names.len == @typeInfo(Kind).@"enum".field_names.len);
 }
 /// The schema rows after gdscript.zig's own: members, then enumerators.
 pub fn wanted(comptime base: usize) [specs.len + kind_names.len]c.struct_xdt_field {
     var out: [specs.len + kind_names.len]c.struct_xdt_field = undefined;
-    for (specs, 0..) |spec, i| out[i] = .{ .owner = @intCast(base + @intFromEnum(spec[0])), .name = spec[1], .kind = @intCast(spec[2]), .width = spec[3], .optional = @intFromBool(spec[4]) };
-    for (kind_names, 0..) |kind, i| out[specs.len + i] = .{ .owner = @intCast(base + @intFromEnum(Type.variant_type)), .name = kind[0], .kind = c.XDT_ANY, .width = 0, .optional = 1 };
+    for (specs, 0..) |spec, i| out[i] = .{ .owner = @intCast(base + @backingInt(spec[0])), .name = spec[1], .kind = @intCast(spec[2]), .width = spec[3], .optional = @intFromBool(spec[4]) };
+    for (kind_names, 0..) |kind, i| out[specs.len + i] = .{ .owner = @intCast(base + @backingInt(Type.variant_type)), .name = kind[0], .kind = c.XDT_ANY, .width = 0, .optional = 1 };
     return out;
 }
 /// Null when a Variant can be read at all in this build: 24 bytes (a
 /// single-precision engine), with its type tag and 16 data bytes inside.
 pub fn usable(layout: *const Layout) ?[]const u8 {
-    const tag = layout.value_offsets[@intFromEnum(F.variant_type)] orelse return "GDScriptValueLayoutUnavailable";
-    const data = layout.value_offsets[@intFromEnum(F.variant_data)] orelse return "GDScriptValueLayoutUnavailable";
-    if (layout.value_sizes[@intFromEnum(Type.variant)] != 24 or tag > 20 or data > 8 or layout.kinds[0] == null) return "GDScriptValueLayoutUnavailable";
+    const tag = layout.value_offsets[@backingInt(F.variant_type)] orelse return "GDScriptValueLayoutUnavailable";
+    const data = layout.value_offsets[@backingInt(F.variant_data)] orelse return "GDScriptValueLayoutUnavailable";
+    if (layout.value_sizes[@backingInt(Type.variant)] != 24 or tag > 20 or data > 8 or layout.kinds[0] == null) return "GDScriptValueLayoutUnavailable";
     return null;
 }
 
@@ -280,15 +280,15 @@ pub const Reader = struct {
     classes: std.ArrayList(struct { vptr: u64, class: Class }) = .empty,
 
     fn off(self: *const Reader, field: F) ?u32 {
-        return self.layout.value_offsets[@intFromEnum(field)];
+        return self.layout.value_offsets[@backingInt(field)];
     }
     fn size(self: *const Reader, t: Type) u32 {
-        return self.layout.value_sizes[@intFromEnum(t)];
+        return self.layout.value_sizes[@backingInt(t)];
     }
     pub fn kindOf(self: *const Reader, raw: *const Raw) ?Kind {
         const tag = std.mem.readInt(u32, raw[self.off(.variant_type).?..][0..4], .little);
         for (self.layout.kinds, 0..) |value, i| {
-            if (value != null and value.? == tag) return @enumFromInt(i);
+            if (value != null and value.? == tag) return @fromBackingInt(@intCast(i));
         }
         return null;
     }
@@ -298,7 +298,7 @@ pub const Reader = struct {
     /// A Variant of `kind` around `bytes`, for values that have no Variant of
     /// their own in the target (packed elements, components).
     fn make(self: *const Reader, kind: Kind, bytes: []const u8) ?Raw {
-        const tag = self.layout.kinds[@intFromEnum(kind)] orelse return null;
+        const tag = self.layout.kinds[@backingInt(kind)] orelse return null;
         var raw: Raw = @splat(0);
         std.mem.writeInt(u32, raw[self.off(.variant_type).?..][0..4], tag, .little);
         @memcpy(raw[self.off(.variant_data).?..][0..bytes.len], bytes);
@@ -582,7 +582,7 @@ pub const Reader = struct {
     /// shown inside another is cut shorter and its containers only counted.
     pub fn show(self: *Reader, raw: *const Raw, deep: bool) anyerror!Shown {
         const kind = self.kindOf(raw) orelse return .{ .type = "unknown", .display = "unknown Variant type", .reason = "GDScriptVariantTypeUnknown" };
-        var shown = Shown{ .type = kind_names[@intFromEnum(kind)][1], .display = "" };
+        var shown = Shown{ .type = kind_names[@backingInt(kind)][1], .display = "" };
         var out = Out{ .a = self.a };
         const bytes = self.data(raw);
         const chars: usize = if (deep) top_chars else inner_chars;
@@ -1202,7 +1202,7 @@ fn testLayout() Layout {
 }
 fn variant(kind: Kind, payload: []const u8) Raw {
     var raw: Raw = @splat(0);
-    raw[0] = @intFromEnum(kind);
+    raw[0] = @backingInt(kind);
     @memcpy(raw[8..][0..payload.len], payload);
     return raw;
 }
@@ -1259,7 +1259,7 @@ test "scalars, strings and vectors are shown as GDScript writes them" {
         try testing.expect(shown.reason == null);
     }
     // A long string is cut and says how long it is; a bad one is refused.
-    const long = fake.text("x" ** 300);
+    const long = fake.text(&@as([300]u8, @splat('x')));
     const cut = try r.show(&variant(.string, &word(long)), true);
     try testing.expect(cut.truncated and cut.count.? == 300 and std.mem.endsWith(u8, cut.display, "…\""));
     try testing.expectEqualStrings("GDScriptStringInvalid", (try r.show(&variant(.string, &word(long + 4)), true)).reason.?);
@@ -1271,7 +1271,7 @@ test "scalars, strings and vectors are shown as GDScript writes them" {
     bare.value_sizes[0] = 40;
     try testing.expectEqualStrings("GDScriptValueLayoutUnavailable", usable(&bare).?);
     bare = layout;
-    bare.value_offsets[@intFromEnum(F.array_ptr)] = null;
+    bare.value_offsets[@backingInt(F.array_ptr)] = null;
     var r2 = Reader{ .memory = &memory, .a = a, .layout = &bare };
     try testing.expectEqualStrings("GDScriptArrayLayoutUnavailable", (try r2.show(&variant(.array, &word(0x10800)), true)).reason.?);
     try testing.expectEqualStrings("Node", (try abiName(a, "4Node\x00")).?);

@@ -84,7 +84,9 @@ fn enumerate(comptime T: type, comptime query: anytype, args: anytype, comptime 
             log.err(.render, "xodb: {s} enumeration failed: {d} (count {d})\n", .{ label, result, count });
             return error.VulkanFailed;
         }
-        return .{ .items = values[0..count], .capacity = values.len };
+        var list: std.ArrayList(T) = .fromOwnedSlice(values);
+        list.items.len = count;
+        return list;
     }
     log.err(.render, "xodb: {s} enumeration still incomplete after four attempts\n", .{label});
     return error.VulkanEnumerationUnstable;
@@ -352,7 +354,7 @@ pub const Renderer = struct {
             if (c.getenv(name) != null) return null;
         }
         var path: [64]u8 = undefined;
-        const link = std.fmt.bufPrintZ(&path, "/sys/dev/char/{d}:{d}/device/driver", .{ node.major, node.minor }) catch return null;
+        const link = std.fmt.bufPrintSentinel(&path, "/sys/dev/char/{d}:{d}/device/driver", .{ node.major, node.minor }, 0) catch return null;
         var target: [256]u8 = undefined;
         const n = c.readlink(link.ptr, &target, target.len);
         if (n <= 0) return null;

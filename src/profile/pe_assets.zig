@@ -20,7 +20,7 @@ pub const Asset = struct {
     pub fn fromBytes(a: std.mem.Allocator, id: u64, path: []const u8, placement: Placement, bytes: snapshot.Bytes) !*Asset {
         const self = try a.create(Asset);
         errdefer a.destroy(self);
-        self.* = .{ .id = id, .path = try a.dupeZ(u8, path), .placement = placement, .bias = placement.bias, .mapping = bytes, .image = undefined };
+        self.* = .{ .id = id, .path = try a.dupeSentinel(u8, path, 0), .placement = placement, .bias = placement.bias, .mapping = bytes, .image = undefined };
         errdefer a.free(self.path);
         var image: ?*c.struct_xpe_image = null;
         const source = c.struct_xpe_source{ .context = self, .size = bytes.len, .layout = c.XPE_FILE, .read = read };

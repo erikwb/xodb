@@ -26,7 +26,7 @@ fn directory(a: std.mem.Allocator) !c_int {
         if (s.len > 0 and s[0] == '/') break :blk s;
         return error.SourceCacheUnavailable;
     } else if (c.getenv("HOME")) |p| try std.fmt.allocPrint(a, "{s}/.cache", .{std.mem.span(p)}) else return error.SourceCacheUnavailable;
-    const root = try a.dupeZ(u8, base);
+    const root = try a.dupeSentinel(u8, base, 0);
     _ = c.mkdir(root, @as(c_uint, 0o700));
     const path = try std.fmt.allocPrintSentinel(a, "{s}/xodb-source-v1", .{base}, 0);
     _ = c.mkdir(path, @as(c_uint, 0o700));
@@ -121,7 +121,7 @@ pub fn fetch(a: std.mem.Allocator, target: *const rt.struct_xrt_target, request:
     var scratch = std.heap.ArenaAllocator.init(a);
     defer scratch.deinit();
     const s = scratch.allocator();
-    const name = try s.dupeZ(u8, path);
+    const name = try s.dupeSentinel(u8, path, 0);
     var meta: rt.struct_xrt_source_file = undefined;
     if (rt.xrt_source_open(target, request, name, &meta) != rt.XRT_OK) return reason(meta);
     defer if (meta.handle != 0) {

@@ -116,7 +116,7 @@ pub fn call(allocator: std.mem.Allocator, name: []const u8, args: std.json.Value
         const value = args.object.get("path") orelse return error.InvalidArguments;
         if (value != .string) return error.InvalidArguments;
         const bytes = try @import("profile/allocation_archive.zig").encode(allocator, capture.?, null);
-        const path = try allocator.dupeZ(u8, value.string);
+        const path = try allocator.dupeSentinel(u8, value.string, 0);
         return wire.value(allocator, @import("profile/archive.zig").publish(path, bytes, null));
     } else if (std.mem.eql(u8, name, "allocation_preview_scenario")) {
         try wire.fields(args, &.{"name"});

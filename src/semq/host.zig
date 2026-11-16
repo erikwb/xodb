@@ -12,11 +12,7 @@ const libc = @import("../c.zig").api;
 const Session = @import("../model/session.zig").Session;
 const adapter = @import("adapter.zig");
 const sidecar = @import("ghidra_sidecar.zig");
-pub const c = @cImport({
-    @cInclude("xsq.h");
-    @cInclude("xsq_report.h");
-    @cInclude("ghx_host.h");
-});
+pub const c = @import("c_semq_host");
 const Allocator = std.mem.Allocator;
 const page = std.heap.page_allocator;
 
@@ -320,7 +316,7 @@ pub const Job = struct {
             };
             if (outcome) |ready| {
                 export_path = try std.fmt.allocPrint(a, "{s}/sidecar-export.json", .{self.outdir});
-                const export_z = try a.dupeZ(u8, export_path);
+                const export_z = try a.dupeSentinel(u8, export_path, 0);
                 try writeFile(export_z, ready.document);
                 bytes = ready.document;
                 worker_ms = ready.elapsed_ms;
@@ -678,7 +674,7 @@ fn nowMs() u64 {
 }
 
 fn readFile(a: Allocator, path: []const u8, limit: usize) ![]u8 {
-    const z = try a.dupeZ(u8, path);
+    const z = try a.dupeSentinel(u8, path, 0);
     const fd = libc.open(z.ptr, libc.O_RDONLY | libc.O_CLOEXEC | libc.O_NOFOLLOW);
     if (fd < 0) return error.ExportMissing;
     defer _ = libc.close(fd);
@@ -716,7 +712,7 @@ pub fn sweepStale() usize {
     const base_c = libc.getenv("TMPDIR");
     const base: []const u8 = if (base_c != null and base_c[0] != 0) std.mem.span(base_c) else "/tmp";
     var path: [4096]u8 = undefined;
-    const dir_z = std.fmt.bufPrintZ(&path, "{s}", .{base}) catch return 0;
+    const dir_z = std.fmt.bufPrintSentinel(&path, "{s}", .{base}, 0) catch return 0;
     const dir = libc.opendir(dir_z.ptr) orelse return 0;
     defer _ = libc.closedir(dir);
     var removed: usize = 0;
@@ -728,10 +724,10 @@ pub fn sweepStale() usize {
         const pid = std.fmt.parseInt(u32, rest[0..dash], 10) catch continue;
         if (pid == 0 or pid == libc.getpid()) continue;
         var proc: [32]u8 = undefined;
-        const proc_z = std.fmt.bufPrintZ(&proc, "/proc/{d}", .{pid}) catch continue;
+        const proc_z = std.fmt.bufPrintSentinel(&proc, "/proc/{d}", .{pid}, 0) catch continue;
         if (present(proc_z)) continue;
         var full: [4200]u8 = undefined;
-        const full_z = std.fmt.bufPrintZ(&full, "{s}/{s}", .{ base, name }) catch continue;
+        const full_z = std.fmt.bufPrintSentinel(&full, "{s}/{s}", .{ base, name }, 0) catch continue;
         var st: libc.struct_stat = undefined;
         if (libc.lstat(full_z.ptr, &st) != 0 or st.st_mode & libc.S_IFMT != libc.S_IFDIR or st.st_uid != libc.getuid()) continue;
         if (c.xghx_remove_tree(full_z.ptr) == 0) removed += 1;
@@ -1137,7 +1133,7 @@ pub const State = struct {
         for (candidates[0..count.*]) |old| if (old.entry == function.key.entry and std.mem.eql(u8, &old.sha256, &function.key.image_sha256)) return;
         const module = session.modules.at(address) catch return;
         const local_path = !session.target.isRemote() and blk: {
-            const path_z = a.dupeZ(u8, function.module_path) catch break :blk false;
+            const path_z = a.dupeSentinel(u8, function.module_path, 0) catch break :blk false;
             break :blk present(path_z);
         };
         candidates[count.*] = .{
@@ -1239,7 +1235,7 @@ pub const State = struct {
             };
             if (duplicate) continue;
             var stat: libc.struct_stat = undefined;
-            const path_z = select_arena.allocator().dupeZ(u8, region.path) catch continue;
+            const path_z = select_arena.allocator().dupeSentinel(u8, region.path, 0) catch continue;
             const size: u64 = if (libc.stat(path_z.ptr, &stat) == 0 and stat.st_size >= 0) @intCast(stat.st_size) else region.end -| region.start;
             const main = self.warm_main == null and count == 0 or self.warm_main == id;
             if (!main and size > self.eager_library_bytes) {
@@ -1322,7 +1318,7 @@ pub const State = struct {
             };
             for (selected_images[0..count], images) |candidate, *image| image.* = .{
                 .module_id = candidate.id,
-                .path = a.dupeZ(u8, candidate.path) catch {
+                .path = a.dupeSentinel(u8, candidate.path, 0) catch {
                     warm.destroy();
                     return;
                 },
@@ -1346,7 +1342,7 @@ pub const State = struct {
             };
             for (selected_functions[0..function_count], functions) |candidate, *function| function.* = .{
                 .sha256 = candidate.sha256,
-                .path = a.dupeZ(u8, candidate.path) catch {
+                .path = a.dupeSentinel(u8, candidate.path, 0) catch {
                     warm.destroy();
                     return;
                 },
@@ -1521,9 +1517,9 @@ pub const State = struct {
         const dir = try self.privateDir();
         const module = try session.modules.at(function.runtime(function.key.entry));
         if (!std.mem.eql(u8, &self.identity(module), &function.key.image_sha256)) return error.BinaryChangedDuringRead;
-        const original = try page.dupeZ(u8, function.module_path);
+        const original = try page.dupeSentinel(u8, function.module_path, 0);
         defer page.free(original);
-        const image_path = if (producer_kind == .sidecar and present(original)) try page.dupeZ(u8, function.module_path) else try std.fmt.allocPrintSentinel(page, "{s}/image-{s}.image", .{ dir, &function.key.image_sha256 }, 0);
+        const image_path = if (producer_kind == .sidecar and present(original)) try page.dupeSentinel(u8, function.module_path, 0) else try std.fmt.allocPrintSentinel(page, "{s}/image-{s}.image", .{ dir, &function.key.image_sha256 }, 0);
         defer page.free(image_path);
         if (!present(image_path)) {
             // The worker reads exactly the bytes this session holds for the module.
@@ -1546,12 +1542,12 @@ pub const State = struct {
         errdefer job.arena.deinit();
         const a = job.arena.allocator();
         job.function = try function.dupe(a);
-        if (toolchain) |native| job.toolchain = .{ .dir = try a.dupe(u8, native.dir), .supervisor = try a.dupeZ(u8, native.supervisor), .worker = try a.dupeZ(u8, native.worker), .sleigh = try a.dupeZ(u8, native.sleigh) };
+        if (toolchain) |native| job.toolchain = .{ .dir = try a.dupe(u8, native.dir), .supervisor = try a.dupeSentinel(u8, native.supervisor, 0), .worker = try a.dupeSentinel(u8, native.worker, 0), .sleigh = try a.dupeSentinel(u8, native.sleigh, 0) };
         if (producer_kind == .sidecar) {
             job.sidecar_socket = try sidecar.socketPath(a);
             job.sidecar_starter = try sidecar.starterPath(a);
         }
-        job.image_path = try a.dupeZ(u8, image_path);
+        job.image_path = try a.dupeSentinel(u8, image_path, 0);
         job.outdir = try std.fmt.allocPrintSentinel(a, "{s}/job-{d}", .{ dir, self.next_job }, 0);
         job.thread = try std.Thread.spawn(.{}, Job.run, .{job});
         self.job = job;

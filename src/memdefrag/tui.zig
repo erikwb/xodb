@@ -4,12 +4,7 @@
 //! snapshots, NO_COLOR honoured. The screen itself is dos.zig's 80x25 grid.
 const std = @import("std");
 const c = @import("../c_ui.zig").api;
-const t = @cImport({
-    @cDefine("_GNU_SOURCE", "1");
-    @cInclude("termios.h");
-    @cInclude("sys/ioctl.h");
-    @cInclude("locale.h");
-});
+const t = @import("c_memdefrag_tui");
 const model = @import("model.zig");
 const dos = @import("dos.zig");
 const vga = @import("vga.zig");
@@ -675,7 +670,7 @@ fn redactMap(a: std.mem.Allocator, m: model.Map) !model.Map {
 
 fn readStat(pid: i32) ?Proc {
     var path: [32]u8 = undefined;
-    const p = std.fmt.bufPrintZ(&path, "/proc/{d}/stat", .{pid}) catch return null;
+    const p = std.fmt.bufPrintSentinel(&path, "/proc/{d}/stat", .{pid}, 0) catch return null;
     const fd = c.open(p.ptr, c.O_RDONLY | c.O_CLOEXEC);
     if (fd < 0) return null;
     defer _ = c.close(fd);
@@ -713,7 +708,7 @@ fn bytesShort(buf: []u8, v: u64) []const u8 {
 }
 fn readFile(a: std.mem.Allocator, path: []const u8) ![]u8 {
     var pb: [4096]u8 = undefined;
-    const z = std.fmt.bufPrintZ(&pb, "{s}", .{path}) catch return error.ReplayPath;
+    const z = std.fmt.bufPrintSentinel(&pb, "{s}", .{path}, 0) catch return error.ReplayPath;
     const fd = c.open(z.ptr, c.O_RDONLY | c.O_CLOEXEC);
     if (fd < 0) return error.ReplayOpenFailed;
     defer _ = c.close(fd);

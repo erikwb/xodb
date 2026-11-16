@@ -20,8 +20,8 @@ const Context = struct {
 };
 fn identity(ctx: Context, locals: []const info.Local) [64]u8 {
     var h = paging.Identity.init("xodb-native-locals-v1");
-    inline for (std.meta.fields(Context)) |field| {
-        const v = @field(ctx, field.name);
+    inline for (@typeInfo(Context).@"struct".field_names) |field_name| {
+        const v = @field(ctx, field_name);
         if (@typeInfo(@TypeOf(v)) == .optional) h.optional(v) else h.number(v);
     }
     h.number(locals.len);
@@ -29,11 +29,11 @@ fn identity(ctx: Context, locals: []const info.Local) [64]u8 {
         h.text(local.name);
         h.number(@intFromBool(local.parameter));
         h.text(local.value.type.name);
-        h.number(@intFromEnum(local.value.type.kind));
+        h.number(@backingInt(local.value.type.kind));
         h.number(local.value.type.size);
         h.optional(local.value.address);
         h.number(local.value.bits);
-        h.number(@intFromEnum(local.value.availability));
+        h.number(@backingInt(local.value.availability));
         h.text(local.value.data orelse &.{});
         h.text(local.value.valid orelse &.{});
         h.text(local.diagnostic orelse "");
@@ -91,10 +91,10 @@ test "native locals view binds stop frame metadata and resolved locations" {
     const args = try wire.value(a, .{ .view_id = view[0..] });
     try checkView(args, &view, 1);
     try std.testing.expectError(error.LocalsViewRequired, checkView(.{ .object = .empty }, &view, 1));
-    inline for (std.meta.fields(Context)) |field| {
+    inline for (@typeInfo(Context).@"struct".field_names) |field_name| {
         var changed = context;
-        const value = @field(changed, field.name);
-        @field(changed, field.name) = if (@typeInfo(@TypeOf(value)) == .optional) value.? + 1 else value + 1;
+        const value = @field(changed, field_name);
+        @field(changed, field_name) = if (@typeInfo(@TypeOf(value)) == .optional) value.? + 1 else value + 1;
         const different = identity(changed, &locals);
         try std.testing.expectError(error.StaleLocalsView, checkView(args, &different, 1));
     }

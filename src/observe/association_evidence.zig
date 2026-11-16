@@ -86,12 +86,12 @@ pub fn clone(comptime T: type, a: std.mem.Allocator, value: T) std.mem.Allocator
         },
         .@"struct" => |info| {
             var out: T = undefined;
-            inline for (info.fields) |f| @field(out, f.name) = try clone(f.type, a, @field(value, f.name));
+            inline for (info.field_names, info.field_types) |f_name, f_type| @field(out, f_name) = try clone(f_type, a, @field(value, f_name));
             return out;
         },
         .optional => |o| return if (value) |v| try clone(o.child, a, v) else null,
         .@"union" => |info| {
-            inline for (info.fields) |f| if (std.meta.activeTag(value) == @field(info.tag_type.?, f.name)) return @unionInit(T, f.name, try clone(f.type, a, @field(value, f.name)));
+            inline for (info.field_names, info.field_types) |f_name, f_type| if (std.meta.activeTag(value) == @field(info.tag_type.?, f_name)) return @unionInit(T, f_name, try clone(f_type, a, @field(value, f_name)));
             unreachable;
         },
         else => return value,
@@ -105,13 +105,13 @@ pub fn equal(comptime T: type, left: T, right: T) bool {
             return true;
         },
         .@"struct" => |info| {
-            inline for (info.fields) |f| if (!equal(f.type, @field(left, f.name), @field(right, f.name))) return false;
+            inline for (info.field_names, info.field_types) |f_name, f_type| if (!equal(f_type, @field(left, f_name), @field(right, f_name))) return false;
             return true;
         },
         .optional => |o| return if (left) |l| (if (right) |r| equal(o.child, l, r) else false) else right == null,
         .@"union" => |info| {
             if (std.meta.activeTag(left) != std.meta.activeTag(right)) return false;
-            inline for (info.fields) |f| if (std.meta.activeTag(left) == @field(info.tag_type.?, f.name)) return equal(f.type, @field(left, f.name), @field(right, f.name));
+            inline for (info.field_names, info.field_types) |f_name, f_type| if (std.meta.activeTag(left) == @field(info.tag_type.?, f_name)) return equal(f_type, @field(left, f_name), @field(right, f_name));
             unreachable;
         },
         else => return std.meta.eql(left, right),

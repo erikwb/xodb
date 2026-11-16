@@ -57,7 +57,7 @@ pub const Table = struct {
         }
     }
     fn matches(self: *const Table, text: []const u8) bool {
-        return self.filter_len == 0 or std.ascii.indexOfIgnoreCase(text, self.filter[0..self.filter_len]) != null;
+        return self.filter_len == 0 or std.ascii.findIgnoreCase(text, self.filter[0..self.filter_len]) != null;
     }
     /// Junction ends carry their identity, so edges to different shared
     /// resources can be told apart and matched with the resource rows.
@@ -424,7 +424,7 @@ test "table sorts filters folds and preserves shared identities" {
     t.rebuild(s);
     try std.testing.expectEqual(@as(usize, 2), t.count);
     t.editing = true;
-    try std.testing.expect(t.event(s, &cam, .{ .kind = .press, .shortcut = 'q', .text_bytes = .{'q'} ++ .{0} ** 15, .text_len = 1 }));
+    try std.testing.expect(t.event(s, &cam, .{ .kind = .press, .shortcut = 'q', .text_bytes = .{'q'} ++ @as([15]u8, @splat(0)), .text_len = 1 }));
     try std.testing.expectEqualStrings("alphaq", t.filter[0..t.filter_len]);
     t.filter_len = 5;
     t.rebuild(s);

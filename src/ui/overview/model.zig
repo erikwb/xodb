@@ -253,7 +253,7 @@ pub const Cost = struct {
 
 /// Collector groups, in the contract's order (xrt_sysstat.h).
 pub const Group = enum { summary, cpu, memory, disks, filesystems, network, connections, power, users, services, apps, processes, sysinfo };
-pub const group_count = @typeInfo(Group).@"enum".fields.len;
+pub const group_count = @typeInfo(Group).@"enum".field_names.len;
 pub const GroupState = struct {
     status: Status = .unavailable,
     reason: []const u8 = "not collected",
@@ -338,7 +338,7 @@ pub const Snapshot = struct {
     /// False for a group copied from an earlier sample (sampled less often).
     fresh: [group_count]bool = @splat(true),
     pub fn group(self: *const Snapshot, g: Group) GroupState {
-        return self.groups[@intFromEnum(g)];
+        return self.groups[@backingInt(g)];
     }
 };
 

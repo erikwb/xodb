@@ -94,7 +94,7 @@ fn derivedFlamegraph(a: Allocator, session: *Session, capture: *profile.Capture,
     }
     const Reason = struct { reason: []const u8, samples: u64, examples: []const u32 };
     var reasons: std.ArrayList(Reason) = .empty;
-    for (view.counts.by_reason, 0..) |n, i| if (n > 0) try reasons.append(a, .{ .reason = @tagName(@as(@import("../profile/unwind.zig").Reason, @enumFromInt(i))), .samples = n, .examples = view.reason_examples[i][0..view.reason_example_count[i]] });
+    for (view.counts.by_reason, 0..) |n, i| if (n > 0) try reasons.append(a, .{ .reason = @tagName(@as(@import("../profile/unwind.zig").Reason, @fromBackingInt(@intCast(i)))), .samples = n, .examples = view.reason_examples[i][0..view.reason_example_count[i]] });
     return value(a, .{
         .capture_id = capture.id,
         .revision = capture.revision,
@@ -145,7 +145,7 @@ pub fn call(a: Allocator, session: *Session, name: []const u8, args: Value) !Val
         if (try number(args, "revision", null) != capture.revision) return error.StaleProfile;
         const raw_path = args.object.get("path") orelse return error.InvalidArguments;
         if (raw_path != .string or raw_path.string.len == 0 or raw_path.string.len > 4096 or std.mem.indexOfScalar(u8, raw_path.string, 0) != null) return error.InvalidArguments;
-        const path = try a.dupeZ(u8, raw_path.string);
+        const path = try a.dupeSentinel(u8, raw_path.string, 0);
         const selected_filter = try readFilter(args);
         try session.ensureArchiveViewOwned(selected_filter, session.jobRequester());
         if (capture.collector != null) return error.ProfileStillCollecting;

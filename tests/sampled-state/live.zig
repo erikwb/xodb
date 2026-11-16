@@ -1,17 +1,6 @@
 const std = @import("std");
 const perf = @import("perf");
-const c = @cImport({
-    @cUndef("_FORTIFY_SOURCE");
-    @cDefine("_GNU_SOURCE", "1");
-    @cInclude("unistd.h");
-    @cInclude("fcntl.h");
-    @cInclude("signal.h");
-    @cInclude("sys/wait.h");
-    @cInclude("time.h");
-    @cInclude("dirent.h");
-    @cInclude("linux/perf_event.h");
-    @cInclude("asm/perf_regs.h");
-});
+const c = @import("c_live");
 const gprs: u64 = 0x1ff | (0xff << 16);
 fn now() u64 {
     var ts: c.timespec = undefined;

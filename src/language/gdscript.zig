@@ -59,7 +59,7 @@ const stack_wanted = [_]c.struct_xdt_field{
     want(8, "_in_physics", c.XDT_BOOLEAN, 1, true),
 };
 comptime {
-    std.debug.assert(stack_wanted.len == @typeInfo(Field).@"enum".fields.len);
+    std.debug.assert(stack_wanted.len == @typeInfo(Field).@"enum".field_names.len);
 }
 // The value reader's types follow, each of them optional: a build without
 // one of them still has its stack.
@@ -257,7 +257,7 @@ fn decode(memory: *Memory, a: A, layout: *const Layout, level: *Level, thread_st
         }
     }
     if (level.line == null and level.reason == null) level.reason = "GDScriptLineUnavailable";
-    if (layout.offsets[@intFromEnum(Field.instance_owner_id)]) |offset| {
+    if (layout.offsets[@backingInt(Field.instance_owner_id)]) |offset| {
         if (level.instance != 0 and level.instance % 8 == 0) level.owner_id = memory.word(level.instance +% offset);
     }
 }
@@ -383,9 +383,9 @@ pub fn frameCounters(session: *const Context) !FrameCounters {
     const pointer = layout.engine_singleton orelse return error.RedotFrameCounterUnavailable;
     const engine = memory.word(pointer) orelse return error.RedotFrameCounterUnreadable;
     if (engine == 0) return error.RedotFrameCounterUnavailable;
-    const process = layout.offsets[@intFromEnum(Field.engine_process_frames)] orelse return error.RedotFrameCounterUnavailable;
-    const physics = layout.offsets[@intFromEnum(Field.engine_physics_frames)] orelse return error.RedotFrameCounterUnavailable;
-    const inside = layout.offsets[@intFromEnum(Field.engine_in_physics)] orelse return error.RedotFrameCounterUnavailable;
+    const process = layout.offsets[@backingInt(Field.engine_process_frames)] orelse return error.RedotFrameCounterUnavailable;
+    const physics = layout.offsets[@backingInt(Field.engine_physics_frames)] orelse return error.RedotFrameCounterUnavailable;
+    const inside = layout.offsets[@backingInt(Field.engine_in_physics)] orelse return error.RedotFrameCounterUnavailable;
     var flag: [1]u8 = undefined;
     if (!memory.read(engine +% inside, &flag) or flag[0] > 1) return error.RedotFrameCounterUnreadable;
     return .{ .process = memory.word(engine +% process) orelse return error.RedotFrameCounterUnreadable, .physics = memory.word(engine +% physics) orelse return error.RedotFrameCounterUnreadable, .in_physics = flag[0] != 0 };

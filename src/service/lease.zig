@@ -1,7 +1,5 @@
 //! A borrowed controller lease for an owner-thread deferred operation.
-pub const c = @cImport({
-    @cInclude("session.h");
-});
+pub const c = @import("c_service_lease");
 pub const Lease = struct {
     service: *c.struct_xsvc,
     client: u64,

@@ -349,7 +349,7 @@ pub const Image = struct {
             image_budget.releaseSweep(swept - actual);
             swept = actual;
         }
-        return .{ .sweep_bytes = swept, .architecture = @enumFromInt(@intFromEnum(binary.header.machine)), .object = object, .debug_object = debug_object, .dwarf = dwarf, .eh = c.dwarf_getcfi_elf(object), .debug_cfi = if (dwarf) |d| c.dwarf_getcfi(d) else null, .arena = arena, .derived_bytes = charged, .address_table = if (dwarf != null) addressTable(debug_binary, debug_object) else &.{} };
+        return .{ .sweep_bytes = swept, .architecture = @fromBackingInt(@intCast(@backingInt(binary.header.machine))), .object = object, .debug_object = debug_object, .dwarf = dwarf, .eh = c.dwarf_getcfi_elf(object), .debug_cfi = if (dwarf) |d| c.dwarf_getcfi(d) else null, .arena = arena, .derived_bytes = charged, .address_table = if (dwarf != null) addressTable(debug_binary, debug_object) else &.{} };
     }
     fn addressTable(binary: elf.Image, object: *c.Elf) []const u8 {
         // dwarf_begin_elf has decompressed recognized sections in this private
@@ -465,7 +465,12 @@ pub const Image = struct {
     fn loadUnits(self: *Image) !void {
         if (self.units_error) |err| return err;
         if (self.units_ready) return;
-        errdefer |err| self.units_error = err;
+        self.loadUnitsUncached() catch |err| {
+            self.units_error = err;
+            return err;
+        };
+    }
+    fn loadUnitsUncached(self: *Image) !void {
         const d = self.dwarf orelse return error.NoDebugInfo;
         if (!@hasDecl(c, "dwarf_get_units")) {
             try self.loadLegacyUnits(d);
@@ -493,7 +498,12 @@ pub const Image = struct {
         if (unit.kind != std.dwarf.UT.skeleton) return &unit.die;
         if (unit.split_error) |err| return err;
         if (unit.split) |*die| return die;
-        errdefer |err| unit.split_error = err;
+        return self.loadSplitUnit(unit) catch |err| {
+            unit.split_error = err;
+            return err;
+        };
+    }
+    fn loadSplitUnit(self: *Image, unit: *Unit) !*c.Dwarf_Die {
         if (!self.allow_split) return error.SplitDwarfDisabled;
         if (!@hasDecl(c, "dwarf_cu_info")) return error.SplitDwarfUnsupportedByLibdw;
         if (self.split_count >= 64) return error.SplitDwarfFileLimit;
@@ -505,7 +515,7 @@ pub const Image = struct {
         var arena = std.heap.ArenaAllocator.init(self.arena.child_allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        const path = if (name_[0] == '/') try a.dupeZ(u8, name_) else blk: {
+        const path = if (name_[0] == '/') try a.dupeSentinel(u8, name_, 0) else blk: {
             const dir_attr = c.dwarf_attr(&unit.die, std.dwarf.AT.comp_dir, &attr) orelse return error.SplitDwarfNameMissing;
             const dir = std.mem.span(c.dwarf_formstring(dir_attr) orelse return error.SplitDwarfNameMissing);
             if (dir.len == 0 or dir.len > 4096 or dir[0] != '/') return error.SplitDwarfRequiresAbsoluteBuildPath;
@@ -681,7 +691,7 @@ pub const Image = struct {
                 var scanned: usize = 0;
                 while (scanned < 4096) : (scanned += 1) {
                     switch (c.dwarf_tag(&child)) {
-                        std.dwarf.TAG.template_type_param, std.dwarf.TAG.template_value_param => result.template = true,
+                        std.dwarf.TAG.template_type_parameter, std.dwarf.TAG.template_value_parameter => result.template = true,
                         std.dwarf.TAG.unspecified_parameters => result.variadic = true,
                         std.dwarf.TAG.formal_parameter => if (h == 0) {
                             var t = reference(&child, std.dwarf.AT.type) orelse return error.ParameterTypeUnavailable;

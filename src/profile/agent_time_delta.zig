@@ -190,7 +190,7 @@ pub const Session = struct {
         const aa = self.arena.allocator();
         for (names, self.rows) |name, rows| {
             const values = rows.?.values;
-            try self.doc.object.put(aa, name, .{ .array = .{ .allocator = aa, .items = values, .capacity = values.len } });
+            try self.doc.object.put(aa, name, .{ .array = .fromOwnedSlice(aa, values) });
             self.row_count += values.len;
         }
         var children = std.json.Array.init(aa);
@@ -229,7 +229,7 @@ pub const Session = struct {
             const entries = try list(items);
             if (entries.len > 256) return error.AgentNestingLimit;
             try out.children.ensureTotalCapacity(out.arena.allocator(), entries.len);
-            var seen = std.StaticBitSet(256).initEmpty();
+            var seen = std.StaticBitSet(256).empty;
             for (entries) |entry| {
                 const old = field(entry, "old");
                 if (old != .null) {

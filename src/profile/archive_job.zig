@@ -44,7 +44,7 @@ pub const Job = struct {
         if (path.len == 0 or path.len > archive.max_path or std.mem.indexOfScalar(u8, path, 0) != null) return error.ArchivePathInvalid;
         const self = try a.create(Job);
         errdefer a.destroy(self);
-        self.* = .{ .id = id, .kind = kind, .path = try a.dupeZ(u8, path) };
+        self.* = .{ .id = id, .kind = kind, .path = try a.dupeSentinel(u8, path, 0) };
         return self;
     }
     pub fn start(self: *Job) !void {

@@ -146,7 +146,7 @@ fn expand(session: *const Context, a: A, layout: *const c.struct_xgo_layout, out
     var file: ?[]const u8 = if (site) |s| s.path else null;
     var line: ?u32 = if (site) |s| s.line else null;
     for (inlined) |item| {
-        const visible = c.xgo_traceback_visible(layout, (try a.dupeZ(u8, item.name)).ptr, @intCast(layout.constants[c.XGO_C_FUNC_NORMAL]), @intFromBool(out.items.len == 0), @intFromBool(callee.* != null), callee.* orelse 0) != 0;
+        const visible = c.xgo_traceback_visible(layout, (try a.dupeSentinel(u8, item.name, 0)).ptr, @intCast(layout.constants[c.XGO_C_FUNC_NORMAL]), @intFromBool(out.items.len == 0), @intFromBool(callee.* != null), callee.* orelse 0) != 0;
         try out.append(a, .{ .name = try a.dupe(u8, item.name), .file = file, .line = line, .kind = "go-inlined", .pc = pc, .function_entry = null, .go_traceback_visible = visible, .reason = null, .line_reason = line_reason });
         callee.* = @intCast(layout.constants[c.XGO_C_FUNC_NORMAL]);
         file = if (item.call_path) |path| try session.mapSourcePath(a, path) else null;

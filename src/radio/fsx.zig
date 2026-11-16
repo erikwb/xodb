@@ -5,7 +5,7 @@ const linux = std.os.linux;
 
 pub fn read(buf: []u8, comptime fmt: []const u8, args: anytype) ?[]const u8 {
     var pb: [512]u8 = undefined;
-    const path = std.fmt.bufPrintZ(&pb, fmt, args) catch return null;
+    const path = std.fmt.bufPrintSentinel(&pb, fmt, args, 0) catch return null;
     const rc = linux.open(path, .{ .ACCMODE = .RDONLY, .CLOEXEC = true, .NONBLOCK = true }, 0);
     if (linux.errno(rc) != .SUCCESS) return null;
     const fd: i32 = @intCast(rc);
@@ -33,13 +33,13 @@ pub fn number(comptime fmt: []const u8, args: anytype) ?u64 {
 }
 pub fn exists(comptime fmt: []const u8, args: anytype) bool {
     var pb: [512]u8 = undefined;
-    const path = std.fmt.bufPrintZ(&pb, fmt, args) catch return false;
+    const path = std.fmt.bufPrintSentinel(&pb, fmt, args, 0) catch return false;
     return linux.errno(linux.access(path, linux.F_OK)) == .SUCCESS;
 }
 pub const WriteError = error{ Open, Write, Path };
 pub fn write(text: []const u8, comptime fmt: []const u8, args: anytype) WriteError!void {
     var pb: [512]u8 = undefined;
-    const path = std.fmt.bufPrintZ(&pb, fmt, args) catch return error.Path;
+    const path = std.fmt.bufPrintSentinel(&pb, fmt, args, 0) catch return error.Path;
     const rc = linux.open(path, .{ .ACCMODE = .WRONLY, .CLOEXEC = true }, 0);
     if (linux.errno(rc) != .SUCCESS) return error.Open;
     const fd: i32 = @intCast(rc);
@@ -50,7 +50,7 @@ pub fn write(text: []const u8, comptime fmt: []const u8, args: anytype) WriteErr
 /// Basename of a symlink's target.
 pub fn linkBase(buf: []u8, comptime fmt: []const u8, args: anytype) ?[]const u8 {
     var pb: [512]u8 = undefined;
-    const path = std.fmt.bufPrintZ(&pb, fmt, args) catch return null;
+    const path = std.fmt.bufPrintSentinel(&pb, fmt, args, 0) catch return null;
     const n = linux.readlink(path, buf.ptr, buf.len);
     if (linux.errno(n) != .SUCCESS) return null;
     const t = buf[0..n];
@@ -58,7 +58,7 @@ pub fn linkBase(buf: []u8, comptime fmt: []const u8, args: anytype) ?[]const u8 
 }
 pub fn linkTarget(buf: []u8, comptime fmt: []const u8, args: anytype) ?[]const u8 {
     var pb: [512]u8 = undefined;
-    const path = std.fmt.bufPrintZ(&pb, fmt, args) catch return null;
+    const path = std.fmt.bufPrintSentinel(&pb, fmt, args, 0) catch return null;
     const n = linux.readlink(path, buf.ptr, buf.len);
     if (linux.errno(n) != .SUCCESS) return null;
     return buf[0..n];
@@ -67,7 +67,7 @@ pub fn linkTarget(buf: []u8, comptime fmt: []const u8, args: anytype) ?[]const u
 /// Calls `each(context, name)` for every entry but . and ..
 pub fn list(comptime fmt: []const u8, args: anytype, context: anytype, comptime each: anytype) void {
     var pb: [512]u8 = undefined;
-    const path = std.fmt.bufPrintZ(&pb, fmt, args) catch return;
+    const path = std.fmt.bufPrintSentinel(&pb, fmt, args, 0) catch return;
     const rc = linux.open(path, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .CLOEXEC = true }, 0);
     if (linux.errno(rc) != .SUCCESS) return;
     const fd: i32 = @intCast(rc);

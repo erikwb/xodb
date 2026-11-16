@@ -1,7 +1,5 @@
 //! The iterator is returned by value. The lint must report this call.
-const c = @cImport({
-    @cInclude("xcb/xcb.h");
-});
+const c = @import("c_abi_fixture");
 
 const roots: *const fn (*const c.xcb_setup_t) callconv(.c) c.xcb_screen_iterator_t = undefined;
 

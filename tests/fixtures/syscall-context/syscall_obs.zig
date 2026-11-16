@@ -275,7 +275,7 @@ pub const Machine = struct {
     exec_seen: u32 = 0,
     truncated: bool = false,
     cancelled: bool = false,
-    slots: [32]Slot = .{Slot{}} ** 32,
+    slots: [32]Slot = @splat(Slot{}),
     nselected: u16 = 0,
 
     pub fn init(storage: []Span) Machine {
@@ -693,11 +693,11 @@ fn readI64(bytes: []const u8, off: usize) ?i64 {
 fn noPointers(comptime T: type) bool {
     switch (@typeInfo(T)) {
         .@"struct" => |info| {
-            inline for (info.fields) |field| if (!noPointers(field.type)) return false;
+            inline for (info.field_types) |field_type| if (!noPointers(field_type)) return false;
             return true;
         },
         .@"union" => |info| {
-            inline for (info.fields) |field| if (!noPointers(field.type)) return false;
+            inline for (info.field_types) |field_type| if (!noPointers(field_type)) return false;
             return true;
         },
         .optional => |info| return noPointers(info.child),
@@ -787,7 +787,7 @@ test "short, swapped, and foreign sample records do not become syscalls" {
     enterRaw(&bad, -1, 0);
     sample(&buf, 0, 42, 100, 7, &bad);
     try std.testing.expectEqual(error.NegativeNumber, decodeRecord(buf[0..108], .enter, null, documented_layout));
-    var unknown = [_]u8{0} ** 16;
+    var unknown = @as([16]u8, @splat(0));
     putU32(&unknown, 0, 99);
     putU16(&unknown, 6, 16);
     const skipped = try decodeRecord(&unknown, .enter, null, documented_layout);

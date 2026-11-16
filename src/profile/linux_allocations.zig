@@ -9,25 +9,7 @@ const perf = @import("linux_perf.zig");
 const hooks = @import("allocation_hooks.zig");
 const kernel = @import("runtime.zig");
 const rt = kernel.c;
-const c = @cImport({
-    @cUndef("_FORTIFY_SOURCE");
-    @cDefine("_GNU_SOURCE", "1");
-    @cDefine("BIONIC_IOCTL_NO_SIGNEDNESS_OVERLOAD", "1");
-    @cInclude("unistd.h");
-    @cInclude("fcntl.h");
-    @cInclude("errno.h");
-    @cInclude("stdio.h");
-    @cInclude("sys/stat.h");
-    @cInclude("sys/ioctl.h");
-    @cInclude("sys/mman.h");
-    @cInclude("sys/syscall.h");
-    @cInclude("linux/perf_event.h");
-    @cInclude("time.h");
-    @cInclude("signal.h");
-    @cInclude("sys/wait.h");
-    @cInclude("dirent.h");
-    @cInclude("dlfcn.h");
-});
+const c = @import("c_profile_linux_allocations");
 pub const max_threads = 32;
 pub const data_pages = 16;
 pub const Source = hooks.Source;
@@ -147,7 +129,7 @@ pub fn start(a: std.mem.Allocator, config: Config) !Opened {
     if (config.sources.len > wire.max_hooks) return .{ .failed = fail("allocations.scope", 0, -1, "too many allocation hooks") };
     var sources: [wire.max_hooks]rt.struct_xrt_allocation_source = undefined;
     for (config.sources, 0..) |source, i| {
-        sources[i] = .{ .id = source.id, .kind = @intFromEnum(source.kind), .fd = source.fd, .offset = source.offset, .identity = .{ .device = source.identity.device, .inode = source.identity.inode, .size = source.identity.size, .mtime_sec = source.identity.mtime_sec, .mtime_ns = source.identity.mtime_ns, .ctime_sec = source.identity.ctime_sec, .ctime_ns = source.identity.ctime_ns } };
+        sources[i] = .{ .id = source.id, .kind = @backingInt(source.kind), .fd = source.fd, .offset = source.offset, .identity = .{ .device = source.identity.device, .inode = source.identity.inode, .size = source.identity.size, .mtime_sec = source.identity.mtime_sec, .mtime_ns = source.identity.mtime_ns, .ctime_sec = source.identity.ctime_sec, .ctime_ns = source.identity.ctime_ns } };
     }
     const Bridge = struct {
         fn open(raw: ?*anyopaque, tid: i32, group: c_int, file: c_int, offset: u64, returning: bool, leader: bool, stacks: bool) callconv(.c) c_int {

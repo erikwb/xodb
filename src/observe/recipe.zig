@@ -324,7 +324,7 @@ pub fn run(session: *Session, recipe: *const Recipe, quit: *volatile c.sig_atomi
     return outcome;
 }
 test "observation recipe is strict bounded owned JSON with explicit defaults" {
-    var bytes = [_]u8{'x'} ** 128;
+    var bytes = @as([128]u8, @splat('x'));
     const text = "{\"version\":1,\"functions\":[\"observed_work\"],\"duration_ms\":25}";
     @memcpy(bytes[0..text.len], text);
     var parsed = try parse(std.testing.allocator, bytes[0..text.len]);

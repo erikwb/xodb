@@ -15,7 +15,7 @@ debugserver); use an authenticated SSH tunnel when the server is remote.
 Local `-- ./program`, `--attach`, overview/replay, MCP serving and the D pane
 are not implemented in this native entry point and refuse explicitly.
 
-Prerequisites: Zig 0.16, the macOS SDK, MoltenVK, and static FreeType/HarfBuzz
+Prerequisites: Zig 0.17, the macOS SDK, MoltenVK, and static FreeType/HarfBuzz
 libraries. No package manager or automatic installs are used. Configure the
 prefixes with `-Ddeps=PREFIX`, `-Dmoltenvk=PREFIX`, or `XODB_MAC_DEPS` and
 `XODB_MAC_MOLTENVK`. Defaults are `tools/deps-prefix` and `tools/moltenvk`.

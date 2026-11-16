@@ -45,7 +45,7 @@ pub const Theme = struct {
     font: struct { pixel: bool = false } = .{},
     block_selection: bool = false,
     colors: Colors = .{},
-    threads: [16]Color = .{ rgb(0xebb624), rgb(0x26d0d2), rgb(0xb48ef0), rgb(0xf078b4), rgb(0xa4d65e), rgb(0xf59a52), rgb(0x5eb5f7), rgb(0x5ee0b0) } ++ .{rgb(0x26d0d2)} ** 8,
+    threads: [16]Color = .{ rgb(0xebb624), rgb(0x26d0d2), rgb(0xb48ef0), rgb(0xf078b4), rgb(0xa4d65e), rgb(0xf59a52), rgb(0x5eb5f7), rgb(0x5ee0b0) } ++ @as([8]Color, @splat(rgb(0x26d0d2))),
     thread_count: usize = 8,
     id: [65]u8 = @splat(0),
     pub fn name(self: *const Theme) []const u8 {
@@ -97,7 +97,7 @@ pub fn builtin(name: []const u8) !Theme {
             .flame_import_unknown = rgb(0xc8cdd5),
             .flame_text = rgb(0x272015),
         };
-        theme.threads = .{ rgb(0x835b00), rgb(0x006973), rgb(0x7149a3), rgb(0xa6386d), rgb(0x4c7019), rgb(0x9b4e16), rgb(0x226da6), rgb(0x217353) } ++ .{rgb(0x006973)} ** 8;
+        theme.threads = .{ rgb(0x835b00), rgb(0x006973), rgb(0x7149a3), rgb(0xa6386d), rgb(0x4c7019), rgb(0x9b4e16), rgb(0x226da6), rgb(0x217353) } ++ @as([8]Color, @splat(rgb(0x006973)));
     } else if (std.mem.eql(u8, name, "builtin:contrast")) {
         theme.colors = .{
             .background = rgb(0x000000),
@@ -163,7 +163,7 @@ pub fn builtin(name: []const u8) !Theme {
             .flame_text = rgb(0xffffff),
         };
         theme.thread_count = 7;
-        theme.threads = .{ rgb(0xffff55), rgb(0x55ffff), rgb(0xff55ff), rgb(0x55ff55), rgb(0x00aaaa), rgb(0xffffff), rgb(0xaaaaaa) } ++ .{rgb(0x55ffff)} ** 9;
+        theme.threads = .{ rgb(0xffff55), rgb(0x55ffff), rgb(0xff55ff), rgb(0x55ff55), rgb(0x00aaaa), rgb(0xffffff), rgb(0xaaaaaa) } ++ @as([9]Color, @splat(rgb(0x55ffff)));
     } else if (!std.mem.eql(u8, name, "builtin:dark")) return error.UnknownThemeBase;
     @memcpy(theme.id[0..name.len], name);
     theme.threads[0] = theme.colors.thread_main;
@@ -228,9 +228,9 @@ pub fn parse(a: std.mem.Allocator, bytes: []const u8, diagnostic: *Diagnostic) !
         while (it.next()) |entry| {
             diagnostic.field("colors", entry.key_ptr.*);
             var found = false;
-            inline for (std.meta.fields(Colors)) |field| {
-                if (std.mem.eql(u8, field.name, entry.key_ptr.*)) {
-                    @field(theme.colors, field.name) = try color(entry.value_ptr.*);
+            inline for (@typeInfo(Colors).@"struct".field_names) |field_name| {
+                if (std.mem.eql(u8, field_name, entry.key_ptr.*)) {
+                    @field(theme.colors, field_name) = try color(entry.value_ptr.*);
                     found = true;
                 }
             }
@@ -336,7 +336,11 @@ test "theme input caps and duplicate fields are enforced" {
     try std.testing.expectError(error.ThemeTooLarge, parse(std.testing.allocator, huge, &d));
     try std.testing.expectError(error.DuplicateField, parse(std.testing.allocator, "{\"version\":1,\"version\":1}", &d));
     try std.testing.expectError(error.DuplicateField, parse(std.testing.allocator, "{\"version\":1,\"colors\":{\"text\":\"#ffffff\",\"text\":\"#000000\"}}", &d));
-    const many = "{\"version\":1,\"palettes\":{\"threads\":[" ++ "\"#112233\"," ** 16 ++ "\"#112233\"]}}";
+    const many = comptime blk: {
+        var text: []const u8 = "{\"version\":1,\"palettes\":{\"threads\":[";
+        for (0..16) |_| text = text ++ "\"#112233\",";
+        break :blk text ++ "\"#112233\"]}}";
+    };
     try std.testing.expectError(error.InvalidThemePalette, parse(std.testing.allocator, many, &d));
 }
 
@@ -376,8 +380,8 @@ test "VGA palette keeps semantic labels and monochrome font settings explicit" {
     for ([_]Color{ vga.colors.flame_low, vga.colors.flame_high, vga.colors.flame_root, vga.colors.flame_unknown, vga.colors.flame_import_unknown }) |bg| try std.testing.expect(contrast(vga.colors.flame_text, bg) >= 4.5);
     try std.testing.expect(!std.meta.eql(vga.colors.good, vga.colors.warm));
     try std.testing.expect(!std.meta.eql(vga.colors.breakpoint, vga.colors.neutral));
-    inline for (std.meta.fields(Colors)) |field| {
-        const color_value = @field(vga.colors, field.name);
+    inline for (@typeInfo(Colors).@"struct".field_names) |field_name| {
+        const color_value = @field(vga.colors, field_name);
         for (color_value[0..3]) |channel| {
             const byte: u8 = @intFromFloat(@round(channel * 255));
             try std.testing.expect(byte == 0 or byte == 85 or byte == 170 or byte == 255);

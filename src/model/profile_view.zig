@@ -593,7 +593,7 @@ pub const Capture = struct {
         self.value.request.?.key = key;
         self.value.request.?.filter = self.state.selection.filter;
         self.value.request.?.selected = self.value.detail_path;
-        session.profile_view = if (self.state.graph != null and value.waiting == null) .{ .capture_id = capture.id, .revision = self.state.revision, .filter = self.state.built_filter, .view_id = self.state.view_id, .sample_count = self.state.sample_count, .basis = @enumFromInt(@intFromEnum(request.basis)) } else null;
+        session.profile_view = if (self.state.graph != null and value.waiting == null) .{ .capture_id = capture.id, .revision = self.state.revision, .filter = self.state.built_filter, .view_id = self.state.view_id, .sample_count = self.state.sample_count, .basis = @fromBackingInt(@intCast(@backingInt(request.basis))) } else null;
     }
 };
 fn copyGraph(a: std.mem.Allocator, graph: *const tree.Graph) !Graph {
@@ -620,7 +620,7 @@ test "flame range filters rebuild selection while timeline-only revisions reuse 
     capture.* = .{ .allocator = a, .arena = std.heap.ArenaAllocator.init(a), .id = 1, .session_id = 1, .generation = 0, .image_epoch = 0, .pid = 1, .started_ns = 100, .ended_ns = 200, .config = .{}, .accepted = undefined, .thread_count = 1, .collector = null, .images = @import("../model/modules.zig").Modules.init(a) };
     defer capture.deinit();
     capture.threads[0] = .{ .debugger_id = 1, .perf = .{ .tid = 1, .event_id = 1, .start_time_ticks = 1, .start_time_known = true } };
-    _ = try std.fmt.bufPrintZ(&capture.thread_names[0], "Thread 1", .{});
+    _ = try std.fmt.bufPrintSentinel(&capture.thread_names[0], "Thread 1", .{}, 0);
     for ([_]u64{ 110, 120 }) |time| try capture.samples.append(a, .{ .tid = 1, .tid_present = true, .time_ns = time, .time_present = true });
     var view = State{};
     defer view.deinit();

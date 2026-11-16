@@ -23,7 +23,7 @@ const records = @import("records.zig");
 const Capture = capture_model.Capture;
 
 pub const version = "xodb-derived-flame-v1";
-pub const reason_count = @typeInfo(unwind.Reason).@"enum".fields.len;
+pub const reason_count = @typeInfo(unwind.Reason).@"enum".field_names.len;
 pub const max_reason_examples = 4;
 pub const Bucket = enum { complete, partial, leaf_only, unavailable, excluded };
 pub const bucket_meaning = .{
@@ -185,8 +185,8 @@ pub fn buildWithLimit(a: std.mem.Allocator, capture: *const Capture, filter: cap
         view.counts.filtered += 1;
         const result = try batch.walk(ordinal);
         identity.update(&result.analysis_id);
-        view.counts.by_reason[@intFromEnum(result.reason)] += 1;
-        const slot = @intFromEnum(result.reason);
+        view.counts.by_reason[@backingInt(result.reason)] += 1;
+        const slot = @backingInt(result.reason);
         if (view.reason_example_count[slot] < max_reason_examples) {
             view.reason_examples[slot][view.reason_example_count[slot]] = ordinal;
             view.reason_example_count[slot] += 1;
@@ -206,7 +206,7 @@ pub fn buildWithLimit(a: std.mem.Allocator, capture: *const Capture, filter: cap
                 .leaf_only => "leaf only",
                 else => "no stack",
             };
-            path[count] = .{ .kind = if (bucket == .unavailable) .unknown else .incomplete, .address = 0x100 + @as(u64, @intFromEnum(bucket)) * 0x100 + @intFromEnum(result.reason), .name = try std.fmt.bufPrint(&marker_label, "[{s}: {s}]", .{ prefix, @tagName(result.reason) }) };
+            path[count] = .{ .kind = if (bucket == .unavailable) .unknown else .incomplete, .address = 0x100 + @as(u64, @backingInt(bucket)) * 0x100 + @backingInt(result.reason), .name = try std.fmt.bufPrint(&marker_label, "[{s}: {s}]", .{ prefix, @tagName(result.reason) }) };
             count += 1;
         }
         // Outermost caller first, the sampled leaf last and only once.

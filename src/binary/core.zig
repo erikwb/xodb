@@ -59,7 +59,7 @@ pub const Core = struct {
         var self = Core{ .arena = std.heap.ArenaAllocator.init(a) };
         errdefer self.deinit();
         const alloc = self.arena.allocator();
-        const z = try alloc.dupeZ(u8, path);
+        const z = try alloc.dupeSentinel(u8, path, 0);
         self.path = z;
         self.fd = c.open(z, c.O_RDONLY | c.O_CLOEXEC | c.O_NONBLOCK);
         if (self.fd < 0) return error.CoreFileUnavailable;
@@ -796,7 +796,6 @@ fn readMapped(self: *const Core, addr: u64, out: []u8) !usize {
     if (done == 0) return error.CoreMemoryOmitted;
     return done;
 }
-
 };
 fn armPhys(pte: u64, va_bits: u16) u64 {
     if (va_bits <= 48) return pte & 0x0000fffffffff000;

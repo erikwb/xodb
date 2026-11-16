@@ -188,7 +188,7 @@ pub const State = struct {
         var pointers: [16][*c]const u8 = @splat(null);
         if (roots.len > pointers.len) return error.DebugDirectoryLimit;
         for (roots, 0..) |root, i| pointers[i] = root.ptr;
-        const name = try a.dupeZ(u8, base);
+        const name = try a.dupeSentinel(u8, base, 0);
         defer a.free(name);
         var options: c.struct_xmo_job_options = std.mem.zeroes(c.struct_xmo_job_options);
         options.executable = if (image.filetype == c.XMO_MH_EXECUTE) (if (self.executable) |p| p.ptr else null) else null;
@@ -223,7 +223,7 @@ pub const State = struct {
         const job = e.job orelse return null;
         const info = c.xmo_job_info(job) orelse return error.MachOSymbolsUnavailable;
         if (info.*.has_text == 0 or info.*.text_vmaddr != text_address) return error.MachOLayoutMismatch;
-        const stored = try a.dupeZ(u8, name);
+        const stored = try a.dupeSentinel(u8, name, 0);
         defer a.free(stored);
         var value: u64 = 0;
         var size: u64 = 0;

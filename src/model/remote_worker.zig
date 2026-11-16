@@ -926,7 +926,7 @@ test "live remote owner publishes while frontend transport guard is armed" {
     profile_capture.* = .{ .allocator = test_a, .arena = std.heap.ArenaAllocator.init(test_a), .id = 1, .session_id = session.id, .generation = opening.generation, .image_epoch = opening.image_epoch, .pid = opening.pid, .started_ns = 100, .ended_ns = 200, .config = .{}, .accepted = std.mem.zeroes(@import("../profile/linux_perf.zig").Acceptance), .thread_count = 1, .collector = null, .images = @import("modules.zig").Modules.init(test_a) };
     session.profile = profile_capture;
     profile_capture.threads[0] = .{ .debugger_id = 1, .perf = .{ .tid = opening.pid, .event_id = 1, .start_time_ticks = 1, .start_time_known = true } };
-    _ = try std.fmt.bufPrintZ(&profile_capture.thread_names[0], "Fixture thread", .{});
+    _ = try std.fmt.bufPrintSentinel(&profile_capture.thread_names[0], "Fixture thread", .{}, 0);
     for ([_]u64{ 110, 120 }) |time| try profile_capture.samples.append(test_a, .{ .tid = @intCast(opening.pid), .tid_present = true, .time_ns = time, .time_present = true });
     profile_capture.syscalls.enabled = true;
     try profile_capture.syscalls.items.append(test_a, .{ .thread_index = 0, .nr = 0, .exit_nr = 0, .entry_ns = 105, .exit_ns = 115, .result = 1, .reason = .complete });

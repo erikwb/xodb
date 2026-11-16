@@ -5,16 +5,7 @@
 //! names the owned inferior.  The wire is a length-prefixed marshalled Variant.
 const std = @import("std");
 
-const c = @cImport({
-    @cUndef("_FORTIFY_SOURCE");
-    @cDefine("_GNU_SOURCE", "1");
-    @cInclude("unistd.h");
-    @cInclude("fcntl.h");
-    @cInclude("errno.h");
-    @cInclude("sys/socket.h");
-    @cInclude("arpa/inet.h");
-    @cInclude("netinet/tcp.h");
-});
+const c = @import("c_redot_protocol");
 
 extern "c" fn bind(c_int, *const c.sockaddr, c.socklen_t) c_int;
 extern "c" fn accept4(c_int, ?*c.sockaddr, ?*c.socklen_t, c_int) c_int;
@@ -896,10 +887,10 @@ test "protocol preview keeps integer identity and complete UTF-8 characters" {
     const value = try displayValue(a, .{ .rid = 0xffffffffffffffff }, 0);
     defer a.free(value);
     try std.testing.expectEqualStrings("RID(18446744073709551615)", value);
-    const unicode = try displayValue(a, .{ .string = "x" ** 95 ++ "éfin" }, 0);
+    const unicode = try displayValue(a, .{ .string = @as([95]u8, @splat('x')) ++ "éfin" }, 0);
     defer a.free(unicode);
     try std.testing.expect(std.unicode.utf8ValidateSlice(unicode));
-    try std.testing.expectEqualStrings("\"" ++ "x" ** 95 ++ "…\"", unicode);
+    try std.testing.expectEqualStrings("\"" ++ @as([95]u8, @splat('x')) ++ "…\"", unicode);
 }
 
 fn decodeBytes(bytes: []const u8) !Value {
@@ -968,8 +959,8 @@ test "adapter refuses bad frames and a wrong pid without spinning" {
 
 test "property previews are capped" {
     const a = std.testing.allocator;
-    const huge = [_]Value{.{ .float = 1.7e308 }} ** 8;
-    const level = [_]Value{.{ .array = &huge }} ** 8;
+    const huge = @as([8]Value, @splat(.{ .float = 1.7e308 }));
+    const level = @as([8]Value, @splat(.{ .array = &huge }));
     const text = try displayValue(a, .{ .array = &level }, 0);
     defer a.free(text);
     try std.testing.expect(text.len <= maximum_display + 3 and std.unicode.utf8ValidateSlice(text));

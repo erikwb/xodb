@@ -21,14 +21,14 @@ pub const Color = draw.Color;
 const fade = draw.fade;
 
 pub const Panel = enum { summary, performance, processes, memory, disk, disk_space, network, connections, power, system, users, services, apps, files, memory_map, graph, galaxy, inheritance, treemap, fetch, radio, kernel_stacks };
-pub const panel_count = @typeInfo(Panel).@"enum".fields.len;
+pub const panel_count = @typeInfo(Panel).@"enum".field_names.len;
 pub const titles = [panel_count][]const u8{ "Summary", "Performance", "Processes", "Memory", "Disk", "Disk Space", "Network", "Connections", "Power & Thermals", "System Info", "Users", "Services", "Installed Apps", "Files & IO", "Memory Map", "FD Graph", "FD Galaxy", "Parent/Child FDs", "FD Treemap", "xodbfetch", "Radio", "Kernel stacks" };
 pub fn shortTitle(panel: Panel) []const u8 {
     return switch (panel) {
         .power => "Power / Temp",
         .inheritance => "FD Inheritance",
         .apps => "Apps",
-        else => titles[@intFromEnum(panel)],
+        else => titles[@backingInt(panel)],
     };
 }
 const keys = [panel_count][]const u8{ "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "", "", "", "L", "M", "G", "Y", "I", "B", "N", "W", "K" };
@@ -219,7 +219,7 @@ pub const View = struct {
     /// (1 Hz) add what the visible panel needs, such as processes.
     pub fn groups(self: *const View, slow: bool) u32 {
         var mask: u32 = 0;
-        for ([_]m.Group{ .summary, .cpu, .memory, .disks, .network, .power, .sysinfo }) |g| mask |= @as(u32, 1) << @intFromEnum(g);
+        for ([_]m.Group{ .summary, .cpu, .memory, .disks, .network, .power, .sysinfo }) |g| mask |= @as(u32, 1) << @backingInt(g);
         const extra: []const m.Group = switch (self.panel) {
             .summary => &.{ .processes, .filesystems },
             .processes, .memory_map => &.{.processes},
@@ -232,7 +232,7 @@ pub const View = struct {
             else => &.{},
         };
         if (!slow) return mask;
-        for (extra) |g| mask |= @as(u32, 1) << @intFromEnum(g);
+        for (extra) |g| mask |= @as(u32, 1) << @backingInt(g);
         return mask;
     }
 
@@ -245,7 +245,7 @@ pub const View = struct {
         self.current = sample;
         self.sample_time = now;
         self.samples += 1;
-        if (sample.snap.fresh[@intFromEnum(m.Group.processes)]) self.rows_dirty = true;
+        if (sample.snap.fresh[@backingInt(m.Group.processes)]) self.rows_dirty = true;
         if (sample.snap.memory_map) |map| {
             self.memmap.acceptReplay(map, sample.snap.memory_viewports, now);
             if (self.panel == .memory_map and self.memmap.look == .modern)
@@ -260,7 +260,7 @@ pub const View = struct {
     fn carry(self: *View, sample: *m.Owned) void {
         const s = &sample.snap;
         inline for (.{ m.Group.processes, m.Group.connections, m.Group.filesystems, m.Group.users, m.Group.services, m.Group.apps }) |g| {
-            const i = @intFromEnum(g);
+            const i = @backingInt(g);
             const collected = !std.mem.eql(u8, s.groups[i].reason, "not collected");
             if (collected) {
                 if (self.holders[i]) |o| o.release();
@@ -355,7 +355,7 @@ pub const View = struct {
             H.gpus.rings[i][2].push(g.temp_c.get());
         };
         H.collector_cost.push(s.cost.cpu_pct.get());
-        if (self.selected) |id| if (s.fresh[@intFromEnum(m.Group.processes)]) {
+        if (self.selected) |id| if (s.fresh[@backingInt(m.Group.processes)]) {
             if (self.findProcess(id)) |p| {
                 H.selected_cpu.push(p.cpu.get());
                 H.selected_mem.push(if (p.rss.get()) |v| @floatFromInt(v) else null);
@@ -535,7 +535,7 @@ pub const View = struct {
             if (lines > 0) self.files.top += @intCast(lines) else self.files.top -|= @intCast(-lines);
             return;
         }
-        const s = &self.scroll[@intFromEnum(self.panel)];
+        const s = &self.scroll[@backingInt(self.panel)];
         if (lines > 0) s.* += @intCast(lines) else s.* -|= @intCast(-lines);
     }
 
@@ -624,7 +624,7 @@ pub const View = struct {
             else => {},
         }
         switch (shortcut) {
-            '1'...'9' => self.show(@enumFromInt(shortcut - '1')),
+            '1'...'9' => self.show(@fromBackingInt(@intCast(shortcut - '1'))),
             '0' => self.show(.system),
             'q' => self.quit = true,
             't' => {
@@ -728,15 +728,15 @@ pub const View = struct {
         switch (event.shortcut) {
             '/' => f.searching = true,
             's' => {
-                f.sort = @enumFromInt((@intFromEnum(f.sort) + 1) % 3);
+                f.sort = @fromBackingInt(@intCast((@backingInt(f.sort) + 1) % 3));
                 f.dirty = true;
             },
             'r' => {
                 f.reverse = !f.reverse;
                 f.dirty = true;
             },
-            '[' => f.show(@enumFromInt((@intFromEnum(f.mode) + 3) % 4)),
-            ']' => f.show(@enumFromInt((@intFromEnum(f.mode) + 1) % 4)),
+            '[' => f.show(@fromBackingInt(@intCast((@backingInt(f.mode) + 3) % 4))),
+            ']' => f.show(@fromBackingInt(@intCast((@backingInt(f.mode) + 1) % 4))),
             'h' => self.fileHolders(),
             'e' => if (event.kind == .press) {
                 if (f.event_authorized or f.exact_active) f.stopCapture() else self.requestAction(.events, now);
@@ -763,17 +763,17 @@ pub const View = struct {
     }
     fn cycle(self: *View, by: i32) void {
         const n: i32 = panel_count;
-        self.show(@enumFromInt(@as(u32, @intCast(@mod(@as(i32, @intFromEnum(self.panel)) + by, n)))));
+        self.show(@fromBackingInt(@intCast(@as(u32, @intCast(@mod(@as(i32, @backingInt(self.panel)) + by, n))))));
     }
     fn cycleSort(self: *View) void {
-        self.sort = @enumFromInt((@intFromEnum(self.sort) + 1) % sort_names.len);
+        self.sort = @fromBackingInt(@intCast((@backingInt(self.sort) + 1) % sort_names.len));
         self.descending = self.sort != .name and self.sort != .pid;
         self.rows_dirty = true;
     }
     fn move(self: *View, by: i32) void {
         if (self.panel == .files) return self.files.move(by);
         if (self.panel != .processes) {
-            const s = &self.scroll[@intFromEnum(self.panel)];
+            const s = &self.scroll[@backingInt(self.panel)];
             if (by > 0) s.* += @intCast(by) else s.* -|= @intCast(-by);
             return;
         }
@@ -793,7 +793,7 @@ pub const View = struct {
         }
         self.selected = id;
         self.selected_row = row;
-        const top = &self.scroll[@intFromEnum(Panel.processes)];
+        const top = &self.scroll[@backingInt(Panel.processes)];
         if (row < top.*) top.* = row;
         if (row >= top.* + self.visible_rows) top.* = row + 1 - self.visible_rows;
         self.auditProcessSelection();
@@ -922,7 +922,7 @@ pub const View = struct {
             },
             .classic => |which| switch (which) {
                 .file, .view, .panels, .help, .start => {
-                    const menu: win95.Menu = @enumFromInt(@intFromEnum(which));
+                    const menu: win95.Menu = @fromBackingInt(@intCast(@backingInt(which)));
                     self.classic_menu = menu;
                     self.classic_cursor = 0;
                 },
@@ -1069,12 +1069,12 @@ pub const View = struct {
         if (q.len == 0) return true;
         // Under redaction, search sees only the alias, so it cannot reveal names.
         var nb: [24]u8 = undefined;
-        if (std.ascii.indexOfIgnoreCase(processName(self, p, &nb), q) != null) return true;
+        if (std.ascii.findIgnoreCase(processName(self, p, &nb), q) != null) return true;
         var buf: [16]u8 = undefined;
         if (std.mem.startsWith(u8, std.fmt.bufPrint(&buf, "{d}", .{p.pid}) catch "", q)) return true;
         if (self.redact) return false;
         const cmd = self.private(p.cmdline);
-        return cmd.ok() and std.ascii.indexOfIgnoreCase(cmd.s, q) != null;
+        return cmd.ok() and std.ascii.findIgnoreCase(cmd.s, q) != null;
     }
 
     /// Rebuilds the visible process rows: sorted flat list, or a tree whose
@@ -1394,7 +1394,7 @@ pub const View = struct {
         const item_h = @min(54, @floor((rect.h - 16) / panel_count));
         const s = self.snap();
         for (0..panel_count) |i| {
-            const panel: Panel = @enumFromInt(i);
+            const panel: Panel = @fromBackingInt(@intCast(i));
             const row = Rect{ .x = rect.x + 8, .y = rect.y + 8 + @as(f32, @floatFromInt(i)) * item_h, .w = rect.w - 16, .h = item_h - 4 };
             const on = panel == self.panel;
             const hot = draw.inside(row, self.pointer[0], self.pointer[1]);
@@ -1711,13 +1711,13 @@ test "panel groups always include the sidebar's whole-system groups" {
     var v = try View.init(std.testing.allocator);
     defer v.deinit();
     const base = v.groups(true);
-    try std.testing.expect(v.groups(false) & (1 << @intFromEnum(m.Group.processes)) == 0);
-    try std.testing.expect(base & (1 << @intFromEnum(m.Group.cpu)) != 0);
-    try std.testing.expect(base & (1 << @intFromEnum(m.Group.connections)) == 0); // costly owner scan only when shown
+    try std.testing.expect(v.groups(false) & (1 << @backingInt(m.Group.processes)) == 0);
+    try std.testing.expect(base & (1 << @backingInt(m.Group.cpu)) != 0);
+    try std.testing.expect(base & (1 << @backingInt(m.Group.connections)) == 0); // costly owner scan only when shown
     v.show(.memory);
-    try std.testing.expect(v.groups(true) & (1 << @intFromEnum(m.Group.processes)) == 0);
+    try std.testing.expect(v.groups(true) & (1 << @backingInt(m.Group.processes)) == 0);
     v.show(.processes);
-    try std.testing.expect(v.groups(true) & (1 << @intFromEnum(m.Group.processes)) != 0);
+    try std.testing.expect(v.groups(true) & (1 << @backingInt(m.Group.processes)) != 0);
 }
 
 test "redaction hides private text even when the source did not" {
@@ -1843,7 +1843,7 @@ test "queued search and actions cannot use a filtered-out process identity" {
     // A subsequent publication can introduce the searched-for identity.
     const n = try m.Owned.create(std.testing.allocator);
     n.snap.processes = try n.arena.allocator().dupe(m.Process, &.{.{ .pid = 999, .start = 30, .name = "new" }});
-    n.snap.fresh[@intFromEnum(m.Group.processes)] = true;
+    n.snap.fresh[@backingInt(m.Group.processes)] = true;
     v.accept(n, 5);
     v.requestAction(.files, 6);
     try std.testing.expectEqual(999, v.pending_action.?.id.pid);
@@ -1965,13 +1965,13 @@ test "classic scrollbar clamps dragging and routes files separately" {
     v.classic_scroll = .{ .track = .{ .x = 10, .y = 100, .w = 16, .h = 200 }, .thumb_h = 20, .thumb_y = 100, .grab = 5, .max = 90 };
     v.pointer = .{ 10, 195 };
     win95.drag(&v);
-    try std.testing.expectEqual(@as(usize, 45), v.scroll[@intFromEnum(Panel.processes)]);
+    try std.testing.expectEqual(@as(usize, 45), v.scroll[@backingInt(Panel.processes)]);
     v.pointer[1] = -1e6;
     win95.drag(&v);
-    try std.testing.expectEqual(@as(usize, 0), v.scroll[@intFromEnum(Panel.processes)]);
+    try std.testing.expectEqual(@as(usize, 0), v.scroll[@backingInt(Panel.processes)]);
     v.pointer[1] = 1e6;
     win95.drag(&v);
-    try std.testing.expectEqual(@as(usize, 90), v.scroll[@intFromEnum(Panel.processes)]);
+    try std.testing.expectEqual(@as(usize, 90), v.scroll[@backingInt(Panel.processes)]);
     v.panel = .files;
     win95.drag(&v);
     try std.testing.expectEqual(@as(usize, 90), v.files.top);
@@ -1989,7 +1989,7 @@ test "classic pull-downs stay inside the window at every size" {
                 try std.testing.expect(q.x + q.w <= width and q.y + q.h <= height + 0.01);
                 try std.testing.expect(q.w == @min(258, width) and place.row >= 20 and place.visible > 0);
                 // Roomy windows keep the period position under the menu title.
-                if (width >= 600 and height >= 720 and menu != .start) try std.testing.expectEqual(@as(f32, 12 + @as(f32, @floatFromInt(@intFromEnum(menu))) * 72), q.x);
+                if (width >= 600 and height >= 720 and menu != .start) try std.testing.expectEqual(@as(f32, 12 + @as(f32, @floatFromInt(@backingInt(menu))) * 72), q.x);
             }
         }
     }

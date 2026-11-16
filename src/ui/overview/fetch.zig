@@ -52,7 +52,7 @@ fn readZ(buf: []u8, p: [:0]const u8) ?[]const u8 {
 /// A small text file at a formatted path, trimmed; null when unreadable or empty.
 fn readf(buf: []u8, comptime fmt: []const u8, args: anytype) ?[]const u8 {
     var pb: [512]u8 = undefined;
-    const p = std.fmt.bufPrintZ(&pb, fmt, args) catch return null;
+    const p = std.fmt.bufPrintSentinel(&pb, fmt, args, 0) catch return null;
     const t = readZ(buf, p) orelse return null;
     return if (t.len == 0) null else t;
 }
@@ -347,7 +347,7 @@ fn loadLogo(gpa: std.mem.Allocator, name: []const u8) ?png.Image {
     const sizes = [_][]const u8{ "256x256", "128x128", "512x512", "96x96", "64x64", "48x48" };
     var k: usize = 0;
     while (k < sizes.len + 1) : (k += 1) {
-        const p = (if (k == 0) std.fmt.bufPrintZ(&pb, "/usr/share/pixmaps/{s}.png", .{name}) else std.fmt.bufPrintZ(&pb, "/usr/share/icons/hicolor/{s}/apps/{s}.png", .{ sizes[k - 1], name })) catch return null;
+        const p = (if (k == 0) std.fmt.bufPrintSentinel(&pb, "/usr/share/pixmaps/{s}.png", .{name}, 0) else std.fmt.bufPrintSentinel(&pb, "/usr/share/icons/hicolor/{s}/apps/{s}.png", .{ sizes[k - 1], name }, 0)) catch return null;
         const fd = c.open(p.ptr, c.O_RDONLY | c.O_CLOEXEC);
         if (fd < 0) continue;
         defer _ = c.close(fd);
@@ -364,7 +364,7 @@ fn loadLogo(gpa: std.mem.Allocator, name: []const u8) ?png.Image {
 fn packages(a: std.mem.Allocator) !?[]const u8 {
     var out: std.ArrayList(u8) = .empty;
     var pb: [512]u8 = undefined;
-    const user_flatpak = if (env("HOME")) |home| std.fmt.bufPrintZ(&pb, "{s}/.local/share/flatpak/app", .{home}) catch null else null;
+    const user_flatpak = if (env("HOME")) |home| std.fmt.bufPrintSentinel(&pb, "{s}/.local/share/flatpak/app", .{home}, 0) catch null else null;
     const found = [_]struct { []const u8, ?u64 }{
         .{ "pacman", countDir("/var/lib/pacman/local") },
         .{ "dpkg", countLines("/var/lib/dpkg/status", "Status: install ok installed") },
@@ -404,7 +404,7 @@ fn displays(a: std.mem.Allocator, redact: bool) ![]const []const u8 {
         const connector = name[std.mem.indexOfScalar(u8, name, '-').? + 1 ..];
         var eb: [512]u8 = undefined;
         var pb: [256]u8 = undefined;
-        const p = std.fmt.bufPrintZ(&pb, "/sys/class/drm/{s}/edid", .{name}) catch continue;
+        const p = std.fmt.bufPrintSentinel(&pb, "/sys/class/drm/{s}/edid", .{name}, 0) catch continue;
         const fd = c.open(p.ptr, c.O_RDONLY | c.O_CLOEXEC);
         const got: isize = if (fd < 0) -1 else c.read(fd, &eb, 128);
         if (fd >= 0) _ = c.close(fd);
@@ -884,7 +884,7 @@ pub const Term = struct {
         const lang = env("LC_ALL") orelse env("LC_CTYPE") orelse env("LANG") orelse "";
         return .{
             .depth = if (std.mem.eql(u8, ct, "truecolor") or std.mem.eql(u8, ct, "24bit")) .truecolor else if (std.mem.indexOf(u8, term, "256") != null or std.mem.indexOf(u8, term, "direct") != null) .cube else .basic,
-            .utf8 = std.ascii.indexOfIgnoreCase(lang, "utf-8") != null or std.ascii.indexOfIgnoreCase(lang, "utf8") != null,
+            .utf8 = std.ascii.findIgnoreCase(lang, "utf-8") != null or std.ascii.findIgnoreCase(lang, "utf8") != null,
         };
     }
     /// The SGR parameters of a foreground (38/30) or background (48/40) colour.
@@ -937,7 +937,7 @@ pub fn render(a: std.mem.Allocator, out: *Out, st: *const Static, head: []const 
     const reset = if (color) "\x1b[0m" else "";
     var text_rows: std.ArrayList([]const u8) = .empty;
     try text_rows.append(a, try std.fmt.allocPrint(a, "{s}{s}{s}", .{ key, head, reset }));
-    try text_rows.append(a, ("-" ** 64)[0..@min(64, std.unicode.utf8CountCodepoints(head) catch head.len)]);
+    try text_rows.append(a, (@as([64]u8, @splat('-')))[0..@min(64, std.unicode.utf8CountCodepoints(head) catch head.len)]);
     for (list) |l| try text_rows.append(a, try std.fmt.allocPrint(a, "{s}{s}{s}: {s}", .{ key, l.key, reset, l.value }));
     if (color) {
         try text_rows.append(a, "");
@@ -961,14 +961,14 @@ pub fn render(a: std.mem.Allocator, out: *Out, st: *const Static, head: []const 
         logo_w = 0;
         for (art) |row| logo_w = @max(logo_w, row.len);
         const rows = try a.alloc([]const u8, art.len);
-        for (rows, art) |*r, row| r.* = try std.fmt.allocPrint(a, "{s}{s}{s}{s}", .{ key, row, reset, (" " ** 64)[0..@min(64, logo_w - row.len)] });
+        for (rows, art) |*r, row| r.* = try std.fmt.allocPrint(a, "{s}{s}{s}{s}", .{ key, row, reset, (@as([64]u8, @splat(' ')))[0..@min(64, logo_w - row.len)] });
         logo = rows;
     };
     const logo_n = if (logo) |rows| rows.len else 0;
     const n = @max(text_rows.items.len, logo_n);
     for (0..n) |i| {
         if (logo) |rows| {
-            if (i < logo_n) out.print("{s}", .{rows[i]}) else out.print("{s}", .{(" " ** 64)[0..@min(64, logo_w)]});
+            if (i < logo_n) out.print("{s}", .{rows[i]}) else out.print("{s}", .{(@as([64]u8, @splat(' ')))[0..@min(64, logo_w)]});
             out.print("   ", .{});
         }
         if (i < text_rows.items.len) out.print("{s}", .{text_rows.items[i]});

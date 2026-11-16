@@ -450,7 +450,7 @@ pub const Workspace = struct {
                         continue;
                     }
                     if (self.activeEditor(context) == null and event.kind == .press and event.mods.alt and event.shortcut >= '1' and event.shortcut <= '6') {
-                        const p: look.Pane = @enumFromInt(event.shortcut - '1');
+                        const p: look.Pane = @fromBackingInt(@intCast(event.shortcut - '1'));
                         self.pinned_pane = if (self.pinned_pane == p) null else p;
                         self.updateLayout(w);
                         w.dirty = true;
@@ -582,7 +582,7 @@ pub const Workspace = struct {
                             continue;
                         }
                     }
-                    if (@intFromEnum(language.selected) < 2 and !self.show_profile and self.show_watch and self.watch_focus and event.kind == .press and event.plain() and event.mods.shift and event.shortcut == 'l') {
+                    if (@backingInt(language.selected) < 2 and !self.show_profile and self.show_watch and self.watch_focus and event.kind == .press and event.plain() and event.mods.shift and event.shortcut == 'l') {
                         self.toggleWatchMode(context);
                         w.dirty = true;
                         continue;
@@ -981,7 +981,7 @@ pub const Workspace = struct {
         self.value_hover = value_hover;
         if (click and !self.show_profile) for (self.layout.tabs, 0..) |b, i| {
             if (b.contains(w.pointer_x, w.pointer_y)) {
-                self.pinned_pane = @enumFromInt(i);
+                self.pinned_pane = @fromBackingInt(@intCast(i));
                 self.updateLayout(w);
                 w.dirty = true;
                 return;
@@ -1230,7 +1230,7 @@ pub const Workspace = struct {
             }
         }
         if (!self.show_profile) {
-            if (code == 18 and @intFromEnum(language.selected) >= 2) {
+            if (code == 18 and @backingInt(language.selected) >= 2) {
                 (if (remote) self.language_panel.beginExpressionView(language) else self.language_panel.beginExpression(session)) catch |err| {
                     self.status = @errorName(err);
                 };
@@ -1250,7 +1250,7 @@ pub const Workspace = struct {
             if (self.show_watch and w.scroll != 0) {
                 const r = self.watch_rect;
                 if (w.pointer_x >= r.x and w.pointer_x < r.x + r.w and w.pointer_y >= r.y and w.pointer_y < r.y + r.h) {
-                    if (@intFromEnum(language.selected) >= 2) self.runtime_watch_panel.scrollBy(w.scroll) else self.watch_panel.scrollBy(w.scroll);
+                    if (@backingInt(language.selected) >= 2) self.runtime_watch_panel.scrollBy(w.scroll) else self.watch_panel.scrollBy(w.scroll);
                     w.scroll = 0;
                     w.dirty = true;
                 }
@@ -1259,14 +1259,14 @@ pub const Workspace = struct {
                 const r = self.watch_rect;
                 self.watch_focus = w.pointer_x >= r.x and w.pointer_x < r.x + r.w and w.pointer_y >= r.y and w.pointer_y < r.y + r.h;
                 if (self.watch_focus) {
-                    if (@intFromEnum(language.selected) >= 2) {
+                    if (@backingInt(language.selected) >= 2) {
                         self.runtime_watch_panel.click(w.pointer_x, w.pointer_y);
                     } else if (self.watch_panel.rowAt(w.pointer_y, &self.watch_hits)) |i| self.watch_panel.selected = i;
                     click = false;
                     w.dirty = true;
                 }
             }
-            if (self.show_watch and self.watch_focus and @intFromEnum(language.selected) >= 2) {
+            if (self.show_watch and self.watch_focus and @backingInt(language.selected) >= 2) {
                 if (remote) {
                     switch (self.runtime_watch_panel.keyView(self.runtime_watch_view, code)) {
                         .ignored => {},
@@ -1290,7 +1290,7 @@ pub const Workspace = struct {
                     }
                 }
             }
-            if (self.show_watch and self.watch_focus and @intFromEnum(language.selected) < 2) {
+            if (self.show_watch and self.watch_focus and @backingInt(language.selected) < 2) {
                 switch (self.watch_panel.keyView(self.watch_view, code)) {
                     .ignored => {},
                     .local => {
@@ -1316,7 +1316,7 @@ pub const Workspace = struct {
                 w.dirty = true;
             }
         }
-        if (!self.show_profile and self.layout.visible(.registers) and @intFromEnum(language.selected) >= 2) {
+        if (!self.show_profile and self.layout.visible(.registers) and @backingInt(language.selected) >= 2) {
             if (click) {
                 if (remote) {
                     const result = self.language_panel.clickView(language, w.pointer_x, w.pointer_y) catch |err| {
@@ -1357,7 +1357,7 @@ pub const Workspace = struct {
             if (remote) {
                 const tabs = @import("../model/language_tabs.zig");
                 for (1..tabs.order.len + 1) |offset| {
-                    const tab = tabs.order[(@intFromEnum(language.selected) + offset) % tabs.order.len];
+                    const tab = tabs.order[(@backingInt(language.selected) + offset) % tabs.order.len];
                     if (language.visible(tab)) {
                         context.send(self, .{ .language = .{ .tab = tab } });
                         break;
@@ -1370,7 +1370,7 @@ pub const Workspace = struct {
             self.selected_local = @intFromFloat((w.pointer_y - self.language_panel.content_y) / look.workspace.local_row);
             w.dirty = true;
         }
-        if (code == 17 and @intFromEnum(language.selected) >= 2) {
+        if (code == 17 and @backingInt(language.selected) >= 2) {
             if (remote) {
                 const action = self.language_panel.watchBindingView(language) catch |err| {
                     self.status = @import("language_tabs.zig").watchError(err);
@@ -2621,7 +2621,7 @@ pub const Workspace = struct {
             return;
         }
         const events_rect = gpuRect(self.layout.rect(.events));
-        if (self.show_watch and @intFromEnum(self.runtime_watch_view.selected_language) >= 2) {
+        if (self.show_watch and @backingInt(self.runtime_watch_view.selected_language) >= 2) {
             try pane(r, font, events_rect, "RUNTIME WATCHES", "W binding  Shift+E name  V events  [] scroll  Del remove");
             self.watch_rect = events_rect;
             if (self.watch_focus) try r.rect(.{ .x = events_rect.x + 1, .y = events_rect.y + 32, .w = events_rect.w - 2, .h = 2 }, theme.focus);
@@ -2771,7 +2771,7 @@ test "timeline drag and lane click commit a flame filter; motion does not" {
     session.profile = capture;
     for (0..2) |i| {
         capture.threads[i] = .{ .debugger_id = i + 1, .perf = .{ .tid = @intCast(i + 41), .event_id = i + 1, .start_time_ticks = 1, .start_time_known = true } };
-        _ = try std.fmt.bufPrintZ(&capture.thread_names[i], "Thread {d}", .{i + 41});
+        _ = try std.fmt.bufPrintSentinel(&capture.thread_names[i], "Thread {d}", .{i + 41}, 0);
     }
     for (0..100) |i| try capture.samples.append(a, .{ .tid = @intCast(41 + i % 2), .tid_present = true, .time_ns = 1000 + i * 10_000, .time_present = true });
     // Invalid samples are excluded exactly as flames exclude them.
@@ -2910,12 +2910,12 @@ test "capture setup: S opens it, an empty subset never starts, replacement clear
     defer {
         session.target.testing().thread_count = 0;
         session.target.testing().pid = 0;
-        session.target.testing().state = @intFromEnum(linux.State.idle);
+        session.target.testing().state = @backingInt(linux.State.idle);
     }
     session.target.testing().pid = 4242;
-    session.target.testing().state = @intFromEnum(linux.State.stopped);
+    session.target.testing().state = @backingInt(linux.State.stopped);
     session.target.testing().image_epoch = 1;
-    for (0..3) |i| session.target.testing().threads[i] = std.mem.zeroInit(@TypeOf(session.target.testing().threads[i]), .{ .id = i + 1, .tid = @as(i32, @intCast(4242 + i)), .state = @intFromEnum(linux.State.stopped) });
+    for (0..3) |i| session.target.testing().threads[i] = std.mem.zeroInit(@TypeOf(session.target.testing().threads[i]), .{ .id = i + 1, .tid = @as(i32, @intCast(4242 + i)), .state = @backingInt(linux.State.stopped) });
     session.target.testing().thread_count = 3;
     // The synthetic inspection is already current. Setup/input assertions
     // must not issue register reads against invented operating-system PIDs.

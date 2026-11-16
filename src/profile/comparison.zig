@@ -105,7 +105,7 @@ fn buildMatching(allocator: std.mem.Allocator, graphs: [2]*const flame.Graph, ca
             const group = groups.get(try symbolKey(mem, f));
             const category = f.kind == .incomplete;
             const symbol = f.kind == .code and group != null and !group.?.ambiguous;
-            const key = if (symbol) try std.fmt.allocPrint(mem, "symbol:{s}", .{try symbolKey(mem, f)}) else if (category) try std.fmt.allocPrint(mem, "category:{s}", .{f.name}) else try std.fmt.allocPrint(mem, "unmatched:{d}:{d}:{d}:{d}:{d}", .{ if (same_evidence) @as(usize, 0) else side, @intFromEnum(f.kind), f.module_id, f.mapping_id, f.address });
+            const key = if (symbol) try std.fmt.allocPrint(mem, "symbol:{s}", .{try symbolKey(mem, f)}) else if (category) try std.fmt.allocPrint(mem, "category:{s}", .{f.name}) else try std.fmt.allocPrint(mem, "unmatched:{d}:{d}:{d}:{d}:{d}", .{ if (same_evidence) @as(usize, 0) else side, @backingInt(f.kind), f.module_id, f.mapping_id, f.address });
             const found = try index.getOrPut(key);
             if (!found.found_existing) {
                 found.value_ptr.* = @intCast(rows.items.len);
@@ -217,9 +217,9 @@ pub const Job = struct {
         for ([_][]const u8{ before, after }) |path| if (path.len == 0 or path.len > 4096 or std.mem.indexOfScalar(u8, path, 0) != null) return error.ArchivePathInvalid;
         const self = try a.create(Job);
         errdefer a.destroy(self);
-        const first = try a.dupeZ(u8, before);
+        const first = try a.dupeSentinel(u8, before, 0);
         errdefer a.free(first);
-        const second = try a.dupeZ(u8, after);
+        const second = try a.dupeSentinel(u8, after, 0);
         errdefer a.free(second);
         self.* = .{ .paths = .{ first, second } };
         self.thread = try std.Thread.spawn(.{}, run, .{self});

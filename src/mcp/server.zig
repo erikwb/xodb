@@ -953,11 +953,7 @@ test "one oversized reply returns a protocol error and preserves the server" {
 }
 
 test "queued tools preserve client and lease identity at execution" {
-    const socket = @cImport({
-        @cInclude("sys/socket.h");
-        @cInclude("sys/un.h");
-        @cInclude("unistd.h");
-    });
+    const socket = @import("c_mcp_server");
     const service_c = shared_context.c;
     const a = std.testing.allocator;
     var temporary = std.testing.tmpDir(.{});

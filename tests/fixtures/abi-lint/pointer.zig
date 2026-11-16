@@ -1,7 +1,5 @@
 //! The iterator is passed by pointer. That call is allowed.
-const c = @cImport({
-    @cInclude("xcb/xcb.h");
-});
+const c = @import("c_abi_fixture");
 
 const next: *const fn (*c.xcb_screen_iterator_t) callconv(.c) void = undefined;
 

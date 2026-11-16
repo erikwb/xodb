@@ -24,6 +24,7 @@ pub fn build(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
     module.addOptions("overview_font_sources", coverage);
     module.addIncludePath(b.path("src/platform"));
     module.addIncludePath(b.path("src/runtime"));
+    module.addIncludePath(b.path("src/service"));
     module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/include", .{capstone}) });
     module.addObjectFile(.{ .cwd_relative = b.fmt("{s}/lib/libcapstone.a", .{capstone}) });
     for ([_][]const u8{ "cancel.c", "gdb_packet.c", "gdb_link.c", "gdb_description.c", "gdb_lldb.c", "gdbremote.c", "target_state.c", "file_identity.c", "arch.c", "loongarch_step.c", "riscv_step.c", "wire.c", "wire_target.c", "macos_debugserver.c", "owned_helper.c", "owned_helper_stub.c", "../binary/macho.c", "../binary/macho_job.c", "../debug/macho_dwarf.c", "../debug/macho_object.c", "../debug/macho_unwind.c" }) |source|
@@ -35,9 +36,8 @@ pub fn build(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
     module.addObjectFile(.{ .cwd_relative = b.fmt("{s}/lib/libharfbuzz.a", .{deps}) });
     if (link_probe) {
         const written = b.addWriteFiles();
-        const shim = written.add("cocoa_shim_probe.m",
-            "/* The real shim is omitted. Its calls stay unresolved for the link probe. */\n" ++
-                "void xcocoa_link_probe_anchor(void) {}\n");
+        const shim = written.add("cocoa_shim_probe.m", "/* The real shim is omitted. Its calls stay unresolved for the link probe. */\n" ++
+            "void xcocoa_link_probe_anchor(void) {}\n");
         module.addCSourceFile(.{ .file = shim, .flags = &.{ "-fobjc-arc", "-Wall", "-Wextra", "-Werror" } });
     } else module.addCSourceFile(.{ .file = b.path("src/platform/cocoa_shim.m"), .flags = &.{ "-fobjc-arc", "-Wall", "-Wextra", "-Werror" } });
     for ([_][]const u8{ "src/platform/macos_process.c", "src/runtime/log.c" }) |source|
@@ -65,12 +65,13 @@ pub fn build(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
         };
         module.addAnonymousImport(shader[0], .{ .root_source_file = binary });
     }
+    @import("build_c.zig").add(b, module, true, "cocoa");
     const exe = b.addExecutable(.{ .name = "xodb", .root_module = module });
     const install = b.addInstallArtifact(exe, .{});
     b.getInstallStep().dependOn(&install.step);
     b.step("app", "Build/install the native macOS presentation client").dependOn(&install.step);
     const run = b.addRunArtifact(exe);
-    if (b.args) |args| run.addArgs(args);
+    run.addPassthruArgs();
     b.step("run", "Run the native macOS client").dependOn(&run.step);
     const tests = b.addTest(.{ .root_module = module, .filters = &.{ "Cocoa", "translated input", "remote " } });
     const check = b.step("test-cocoa", "Test Cocoa units and the native offscreen contract");
@@ -94,7 +95,7 @@ pub fn build(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
     bundle.addFileArg(b.path("scripts/macos-bundle.py"));
     bundle.addFileArg(exe.getEmittedBin());
     bundle.addArg(b.fmt("{s}/dynamic/dylib/macOS/libMoltenVK.dylib", .{mvk}));
-    bundle.addArg(b.getInstallPath(.prefix, "xodb.app"));
+    bundle.addDirectoryArg(.{ .relative = .{ .base = if (@hasField(std.Build.Configuration.LazyPath.Relative.Base, "deployed_prefix")) .deployed_prefix else .install_prefix, .sub_path = "xodb.app" } });
     b.step("bundle", "Package an ad-hoc signed native app with MoltenVK").dependOn(&bundle.step);
 
     const bootstrap_module = b.createModule(.{ .target = target, .optimize = optimize, .link_libc = true });

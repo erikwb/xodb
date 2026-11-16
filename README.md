@@ -175,7 +175,7 @@ Notes:
 ## Build and run
 
 The GUI baseline is Linux x86-64/Aarch64, a Wayland session, a working Vulkan driver,
-and **Zig 0.16 or newer**. See **[SETUP.md](SETUP.md)** for tracing permissions
+and **Zig 0.17 or newer**. See **[SETUP.md](SETUP.md)** for tracing permissions
 and headless builds. Runs great on OmarchyMac.
 
 Install the compiler tools, development headers, shader compiler and default
@@ -207,10 +207,10 @@ sudo dnf install gcc zig pkgconf-pkg-config wayland-devel wayland-protocols-deve
 XODB_FONT=/usr/share/fonts/dejavu-sans-mono-fonts/DejaVuSansMono.ttf
 ```
 
-Zig is not pinned to an exact compiler version. **0.16.0** is the last verified
-baseline; newer compilers should be checked with the build and test suite, and
-compatibility fixes are welcome. Build reports record `zig version` without
-rejecting newer releases. The [official Zig downloads](https://ziglang.org/download/)
+Zig is not pinned to an exact compiler version. **0.17.x** is the supported
+baseline; newer compilers should be checked with the build and test suite.
+C interfaces are translated by the build before compiling the Zig modules.
+Build reports record `zig version` without rejecting newer releases. The [official Zig downloads](https://ziglang.org/download/)
 provide standalone toolchains. The GUI also requires the stable tablet-v2 XML
 from **wayland-protocols 1.36 or newer**; older distribution releases may need
 updated development packages. Install your GPU's Vulkan driver separately if

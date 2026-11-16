@@ -89,8 +89,8 @@ fn requirePlainValue(comptime T: type) void {
         .pointer => @compileError("untagged message unions must be pointer-free"),
         .optional => |o| requirePlainValue(o.child),
         .array => |v| requirePlainValue(v.child),
-        .@"struct" => |s| inline for (s.fields) |f| requirePlainValue(f.type),
-        .@"union" => |u| inline for (u.fields) |f| requirePlainValue(f.type),
+        .@"struct" => |s| inline for (s.field_types) |f_type| requirePlainValue(f_type),
+        .@"union" => |u| inline for (u.field_types) |f_type| requirePlainValue(f_type),
         else => {},
     }
 }
@@ -105,7 +105,7 @@ fn payloadBytes(value: anytype, remaining: *usize) error{TooLarge}!void {
             for (value) |item| try payloadBytes(item, remaining);
         },
         .optional => if (value) |v| try payloadBytes(v, remaining),
-        .@"struct" => |s| inline for (s.fields) |f| try payloadBytes(@field(value, f.name), remaining),
+        .@"struct" => |s| inline for (s.field_names) |f_name| try payloadBytes(@field(value, f_name), remaining),
         .@"union" => |u| if (u.tag_type == null) {
             comptime requirePlainValue(@TypeOf(value));
         } else switch (value) {
@@ -127,7 +127,7 @@ fn copyOwned(a: Allocator, value: anytype) Allocator.Error!@TypeOf(value) {
         .optional => if (value) |v| try copyOwned(a, v) else null,
         .@"struct" => |s| blk: {
             var copy = value;
-            inline for (s.fields) |f| @field(copy, f.name) = try copyOwned(a, @field(value, f.name));
+            inline for (s.field_names) |f_name| @field(copy, f_name) = try copyOwned(a, @field(value, f_name));
             break :blk copy;
         },
         .@"union" => |u| if (u.tag_type == null) blk: {
@@ -382,16 +382,16 @@ pub const Publication = struct {
         var value = original;
         // Leave room for fixed fallback strings and the publication header.
         var remaining: usize = max_publication_bytes - @sizeOf(Publication) - 4096;
-        inline for (@typeInfo(Presentation).@"struct".fields, 0..) |field, index| {
-            if (comptime std.mem.eql(u8, field.name, "debugger")) {
+        inline for (@typeInfo(Presentation).@"struct".field_names, @typeInfo(Presentation).@"struct".field_types, 0..) |field_name, field_type, index| {
+            if (comptime std.mem.eql(u8, field_name, "debugger")) {
                 if (value.debugger) |*debugger| {
                     const empty: @import("debugger_view.zig").Presentation = .{};
-                    inline for (@typeInfo(@TypeOf(empty)).@"struct".fields, 0..) |part, part_index| {
+                    inline for (@typeInfo(@TypeOf(empty)).@"struct".field_names, 0..) |part_name, part_index| {
                         var available = remaining;
-                        if (payloadBytes(@field(debugger, part.name), &available)) {
+                        if (payloadBytes(@field(debugger, part_name), &available)) {
                             remaining = available;
                         } else |_| {
-                            @field(debugger, part.name) = @field(empty, part.name);
+                            @field(debugger, part_name) = @field(empty, part_name);
                             value.debugger_omitted |= @as(u32, 1) << part_index;
                         }
                     }
@@ -399,10 +399,10 @@ pub const Publication = struct {
                 }
             } else {
                 var available = remaining;
-                if (payloadBytes(@field(value, field.name), &available)) {
+                if (payloadBytes(@field(value, field_name), &available)) {
                     remaining = available;
                 } else |_| {
-                    if (comptime std.mem.eql(u8, field.name, "workspace")) {
+                    if (comptime std.mem.eql(u8, field_name, "workspace")) {
                         // Routing and authority facts must survive even when
                         // a variable metadata string exceeds the pane limit.
                         var header = value.workspace.?;
@@ -411,10 +411,10 @@ pub const Publication = struct {
                         header.frame_state = "";
                         value.workspace = header;
                         value.omitted |= @as(u64, 1) << index;
-                    } else if (comptime @typeInfo(field.type) == .optional) {
-                        @field(value, field.name) = null;
+                    } else if (comptime @typeInfo(field_type) == .optional) {
+                        @field(value, field_name) = null;
                         value.omitted |= @as(u64, 1) << index;
-                    } else if (comptime std.mem.eql(u8, field.name, "diagnostic")) {
+                    } else if (comptime std.mem.eql(u8, field_name, "diagnostic")) {
                         value.diagnostic = "Remote diagnostic exceeds the view limit";
                         value.omitted |= @as(u64, 1) << index;
                     } else unreachable; // All other fields are fixed-size values.
@@ -854,7 +854,7 @@ test "language publication owns header rows and nested binding values" {
     state.state = .stopped;
     state.selected = .ruby;
     var text = [_]u8{ 'k', 'e', 'p', 't' };
-    state.entries[@intFromEnum(state.selected) - 2] = .{ .present = true, .version = &text };
+    state.entries[@backingInt(state.selected) - 2] = .{ .present = true, .version = &text };
     var rows = [_]prepared.Row{.{ .name = &text, .location = &text, .reason = null, .segment = 0, .frame = 1 }};
     var children = [_]named.Child{.{ .key = &text, .type = "String", .display = &text, .address = null, .diagnostic = null, .advisory = false }};
     var bindings = [_]named.Row{.{ .name = &text, .scope = .local, .ordinal = 0, .address = null, .value = .{ .type = "Array", .display = &text, .children = &children } }};
@@ -878,7 +878,7 @@ test "language publication owns header rows and nested binding values" {
     children[0].advisory = true;
     bindings[0].hidden = true;
     const view = publication.value.language.?;
-    try std.testing.expectEqualStrings("kept", view.header.entries[@intFromEnum(view.header.selected) - 2].version);
+    try std.testing.expectEqualStrings("kept", view.header.entries[@backingInt(view.header.selected) - 2].version);
     try std.testing.expectEqualStrings("kept", view.rows[0].name);
     try std.testing.expectEqual(@as(?usize, 1), view.rows[0].frame);
     try std.testing.expectEqualStrings("kept", view.expression);

@@ -35,7 +35,7 @@ fn retainEvidence(a: std.mem.Allocator, value: anytype) std.mem.Allocator.Error!
         },
         .@"struct" => |s| {
             var copy = value;
-            inline for (s.fields) |f| @field(copy, f.name) = try retainEvidence(a, @field(value, f.name));
+            inline for (s.field_names) |f_name| @field(copy, f_name) = try retainEvidence(a, @field(value, f_name));
             return copy;
         },
         .array => {
@@ -463,7 +463,7 @@ pub const Session = struct {
         if (!self.shared_jobs) job.owner = @import("../service/job_owner.zig").Owner.agent(null);
         job.local_id = self.next_profile_id;
         job.reanalyze = reanalyze;
-        if (symbols) |root| job.symbols = try std.heap.page_allocator.dupeZ(u8, root);
+        if (symbols) |root| job.symbols = try std.heap.page_allocator.dupeSentinel(u8, root, 0);
         try job.start();
         self.offline = true;
         self.archive_job = job;
@@ -988,7 +988,7 @@ pub const Session = struct {
         var count: usize = 0;
         errdefer for (saved[0..count]) |arg| a.free(arg);
         for (argv, saved) |arg, *copy| {
-            copy.* = try a.dupeZ(u8, arg);
+            copy.* = try a.dupeSentinel(u8, arg, 0);
             count += 1;
         }
         try self.target.launch(saved);
@@ -1308,7 +1308,7 @@ pub const Session = struct {
             self.probe_resume_lease = previous_lease;
         }
         if (caller.actor == .agent) if (caller.lease) |lease| {
-            if (!lease.valid(linux.now(), @intFromEnum(self.agent_scope))) return error.ControlLeaseRequired;
+            if (!lease.valid(linux.now(), @backingInt(self.agent_scope))) return error.ControlLeaseRequired;
         };
         try self.persistent.remember(self);
         try self.persistent.poll(self);
@@ -1321,7 +1321,7 @@ pub const Session = struct {
             return;
         }
         if (caller.actor == .agent) if (caller.lease) |lease| {
-            if (!lease.valid(linux.now(), @intFromEnum(self.agent_scope))) return error.ControlLeaseRequired;
+            if (!lease.valid(linux.now(), @backingInt(self.agent_scope))) return error.ControlLeaseRequired;
         };
         try self.target.continueExecution();
         self.pending_continue = null;
@@ -1374,7 +1374,7 @@ pub const Session = struct {
         var bit: u8 = 1;
         for (signals) |sig| {
             if (deferred & bit != 0 and sig != already) {
-                const rc = std.os.linux.tgkill(pid, tid, @enumFromInt(@as(u32, @intCast(sig))));
+                const rc = std.os.linux.tgkill(pid, tid, @fromBackingInt(@intCast(@as(u32, @intCast(sig)))));
                 const err = std.posix.errno(rc);
                 if (err != .SUCCESS and err != .SRCH and err != .INVAL) log.debug(.session, "xodb: queued signal {d} was not restored\n", .{sig});
             }
@@ -1470,7 +1470,7 @@ pub const Session = struct {
     fn resumeAllowed(self: *Session) bool {
         if (self.probe_resume_actor != .agent) return true;
         if (self.agent_scope == .observe) return false;
-        return if (self.probe_resume_lease) |lease| lease.valid(linux.now(), @intFromEnum(self.agent_scope)) else true;
+        return if (self.probe_resume_lease) |lease| lease.valid(linux.now(), @backingInt(self.agent_scope)) else true;
     }
     pub fn startSourceStep(self: *Session, tid: i32, over: bool) !void {
         try self.persistent.remember(self);
@@ -1743,7 +1743,7 @@ pub const Session = struct {
             const snapshot_ = self.target.snapshot();
             if (snapshot_.state != .stopped or snapshot_.generation != pending.generation or snapshot_.image_epoch != pending.epoch or
                 (pending.actor == .agent and (self.agent_scope == .observe or
-                    (if (pending.lease) |lease| !lease.valid(linux.now(), @intFromEnum(self.agent_scope)) else false))))
+                    (if (pending.lease) |lease| !lease.valid(linux.now(), @backingInt(self.agent_scope)) else false))))
             {
                 self.cancelStep();
                 self.step_diagnostic = "DeferredContinueCancelled";
@@ -1768,7 +1768,7 @@ pub const Session = struct {
         if (self.pending_continue) |pending| {
             // A slice can cross the lease deadline. Recheck immediately before
             // resuming, even when the same peer has since reclaimed control.
-            if (pending.lease) |lease| if (!lease.valid(linux.now(), @intFromEnum(self.agent_scope))) {
+            if (pending.lease) |lease| if (!lease.valid(linux.now(), @backingInt(self.agent_scope))) {
                 self.cancelStep();
                 self.step_diagnostic = "DeferredContinueCancelled";
                 return;
@@ -2097,7 +2097,7 @@ pub const Session = struct {
         if (module.file_offset != 0) return error.RemoteSourceEmbeddedImageUnsupported;
         for (self.modules.regions.items) |region| {
             if (site.address < region.start or site.address >= region.end) continue;
-            const path = try a.dupeZ(u8, region.path);
+            const path = try a.dupeSentinel(u8, region.path, 0);
             defer a.free(path);
             const request = rt.struct_xrt_file_request{ .kind = rt.XRT_FILE_MAPPED, .mapping = .{ .start = region.start, .end = region.end, .offset = region.offset, .device_major = region.device_major, .device_minor = region.device_minor, .inode = region.inode, .path = path } };
             return @import("remote_source.zig").fetch(a, self.target.handle orelse return error.RemoteSourceUnavailable, &request, site.path, module.image.buildId() orelse return error.SourceBuildIdMissing);

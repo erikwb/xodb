@@ -1,14 +1,6 @@
 //! Confirmed GUI handoffs use argv, retain the sampled identity, and reap children.
 const std = @import("std");
-const c = @cImport({
-    @cUndef("_FORTIFY_SOURCE");
-    @cDefine("_GNU_SOURCE", "1");
-    @cInclude("spawn.h");
-    @cInclude("errno.h");
-    @cInclude("unistd.h");
-    @cInclude("fcntl.h");
-    @cInclude("sys/wait.h");
-});
+const c = @import("c_ui_overview_actions");
 const identity = @import("../../model/process_identity.zig");
 extern fn xrt_spawn_owned_helper(pid: *i32, create: *const fn (*i32, ?*anyopaque) callconv(.c) c_int, context: ?*anyopaque) c_int;
 extern fn xrt_drop_owned_helper(pid: i32) void;
@@ -59,8 +51,8 @@ pub const Launcher = struct {
         const exe: [*:0]const u8 = @ptrCast(&exe_buf);
         var pid_buf: [32]u8 = undefined;
         var start_buf: [32]u8 = undefined;
-        const pid = try std.fmt.bufPrintZ(&pid_buf, "{d}", .{request.id.pid});
-        const start = try std.fmt.bufPrintZ(&start_buf, "{d}", .{request.id.start});
+        const pid = try std.fmt.bufPrintSentinel(&pid_buf, "{d}", .{request.id.pid}, 0);
+        const start = try std.fmt.bufPrintSentinel(&start_buf, "{d}", .{request.id.start}, 0);
         var args: [16:null]?[*:0]const u8 = @splat(null);
         var used: usize = 0;
         var program = exe;

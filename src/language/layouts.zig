@@ -28,12 +28,12 @@ pub const GDScript = struct {
     build_id: [64]u8 = undefined,
     build_id_len: u8 = 0,
     level_size: u32,
-    offsets: [@typeInfo(GDScriptField).@"enum".fields.len]?u32,
+    offsets: [@typeInfo(GDScriptField).@"enum".field_names.len]?u32,
     /// Members, sizes and `Variant::Type` values for the value reader; null
     /// where this build's DWARF does not have them.
-    value_offsets: [@typeInfo(GDScriptValueField).@"enum".fields.len]?u32 = @splat(null),
-    value_sizes: [@typeInfo(GDScriptValueType).@"enum".fields.len]u32 = @splat(0),
-    kinds: [@typeInfo(GDScriptValueKind).@"enum".fields.len]?u32 = @splat(null),
+    value_offsets: [@typeInfo(GDScriptValueField).@"enum".field_names.len]?u32 = @splat(null),
+    value_sizes: [@typeInfo(GDScriptValueType).@"enum".field_names.len]u32 = @splat(0),
+    kinds: [@typeInfo(GDScriptValueKind).@"enum".field_names.len]?u32 = @splat(null),
     /// Runtime address a GDScriptInstance's vtable pointer holds.
     instance_vtable: ?u64 = null,
     /// The executable's static TLS block and the two objects in it.
@@ -45,6 +45,6 @@ pub const GDScript = struct {
     engine_singleton: ?u64 = null,
     units: u64,
     pub fn at(self: *const GDScript, field: GDScriptField) u32 {
-        return self.offsets[@intFromEnum(field)].?;
+        return self.offsets[@backingInt(field)].?;
     }
 };

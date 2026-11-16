@@ -37,7 +37,7 @@ pub const Job = struct {
         }
         const self = try a.create(Job);
         errdefer a.destroy(self);
-        self.* = .{ .id = id, .kind = kind, .path = try a.dupeZ(u8, path), .source = source, .association_source = if (omitted == null and fallback == null) associated else null, .associations_omitted_reason = omitted, .associations_fallback_reason = fallback };
+        self.* = .{ .id = id, .kind = kind, .path = try a.dupeSentinel(u8, path, 0), .source = source, .association_source = if (omitted == null and fallback == null) associated else null, .associations_omitted_reason = omitted, .associations_fallback_reason = fallback };
         errdefer a.free(self.path);
         self.worker = try std.Thread.spawn(.{}, run, .{self});
         return self;

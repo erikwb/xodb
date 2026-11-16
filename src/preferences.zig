@@ -113,10 +113,10 @@ pub fn themeSelection(a: std.mem.Allocator, prefs: *const Preferences, config: ?
     if (cli) |path| return path;
     const path = prefs.appearance.theme.slice();
     if (path.len == 0) return null;
-    if (std.mem.startsWith(u8, path, "builtin:") or std.fs.path.isAbsolute(path)) return try a.dupeZ(u8, path);
+    if (std.mem.startsWith(u8, path, "builtin:") or std.fs.path.isAbsolute(path)) return try a.dupeSentinel(u8, path, 0);
     const joined = try std.fs.path.join(a, &.{ if (config) |file| std.fs.path.dirname(file) orelse "." else ".", path });
     defer a.free(joined);
-    return try a.dupeZ(u8, joined);
+    return try a.dupeSentinel(u8, joined, 0);
 }
 fn parseLoaded(a: std.mem.Allocator, bytes: []const u8) !Loaded {
     if (bytes.len > max_bytes) return error.PreferencesTooLarge;
@@ -183,14 +183,14 @@ test "galaxy look preferences retain defaults and accept deliberate overrides" {
 test "language views default on, turn off one at a time or all at once, and refuse unknown keys" {
     const a = std.testing.allocator;
     const defaults = try parse(a, "{}");
-    inline for (@typeInfo(Languages.Name).@"enum".fields) |field| try std.testing.expect(defaults.languages.on(@enumFromInt(field.value)));
+    inline for (@typeInfo(Languages.Name).@"enum".field_values) |field_value| try std.testing.expect(defaults.languages.on(@fromBackingInt(@intCast(field_value))));
     try defaults.languages.require(.perl);
     const one = try parse(a, "{\"languages\":{\"python\":false}}");
     try std.testing.expectError(error.LanguageDisabled, one.languages.require(.python));
     inline for (.{ .perl, .lua, .javascript, .ruby, .go, .elisp, .gdscript }) |name| try one.languages.require(name);
     // The master switch wins over a language left, or set, on.
     const none = try parse(a, "{\"languages\":{\"enabled\":false,\"perl\":true}}");
-    inline for (@typeInfo(Languages.Name).@"enum".fields) |field| try std.testing.expectError(error.LanguageDisabled, none.languages.require(@enumFromInt(field.value)));
+    inline for (@typeInfo(Languages.Name).@"enum".field_values) |field_value| try std.testing.expectError(error.LanguageDisabled, none.languages.require(@fromBackingInt(@intCast(field_value))));
     try std.testing.expectError(error.UnknownField, parse(a, "{\"languages\":{\"pyton\":false}}"));
     try std.testing.expectError(error.UnknownField, parse(a, "{\"language\":{\"python\":false}}"));
     try std.testing.expectError(error.UnexpectedToken, parse(a, "{\"languages\":{\"python\":0}}"));

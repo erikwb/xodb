@@ -41,11 +41,11 @@ fn build(n: usize, budget: u32) !*model.Capture {
     capture.user_state = try model.sample_state.Store.init(a, n, budget);
     capture.thread_count = 2;
     capture.threads[1] = .{ .debugger_id = 2, .perf = .{ .tid = 4101, .event_id = 2, .start_time_ticks = 1, .start_time_known = true } };
-    _ = try std.fmt.bufPrintZ(&capture.thread_names[1], "Thread 4101", .{});
+    _ = try std.fmt.bufPrintSentinel(&capture.thread_names[1], "Thread 4101", .{}, 0);
     var bytes: [16]u8 = @splat(0);
     std.mem.writeInt(u64, bytes[0..8], parent + 2, .little);
     for (0..n) |i| {
-        const case: Case = @enumFromInt(i % @typeInfo(Case).@"enum".fields.len);
+        const case: Case = @fromBackingInt(@intCast(i % @typeInfo(Case).@"enum".field_names.len));
         const pc = switch (case) {
             .signal => sym.at(image, "saved_signal"),
             .cycle => sym.at(image, "saved_cycle"),
@@ -85,7 +85,7 @@ fn reference(capture: *const model.Capture, filter: model.Filter) !derived.Count
         }
         counts.filtered += 1;
         const result = try unwind.walk(a, capture, ordinal, null);
-        counts.by_reason[@intFromEnum(result.reason)] += 1;
+        counts.by_reason[@backingInt(result.reason)] += 1;
         switch (bucket(result)) {
             .complete => counts.complete += 1,
             .partial => counts.partial += 1,
@@ -151,7 +151,7 @@ test "partial stacks never join complete paths, and the leaf appears once" {
     }
     // Complete samples: thread -> parent -> leaf, the leaf exactly once.
     const reasons = view.counts.by_reason;
-    try std.testing.expect(reasons[@intFromEnum(unwind.Reason.complete)] > 0);
+    try std.testing.expect(reasons[@backingInt(unwind.Reason.complete)] > 0);
     var leaf_hits: u64 = 0;
     for (nodes) |node| if (node.frame.kind == .code and std.mem.eql(u8, node.frame.name, "saved_leaf")) {
         leaf_hits += node.self;
@@ -171,7 +171,7 @@ test "zero-byte retention budget keeps registers and reports every stack as a ga
     defer view.deinit();
     try std.testing.expectEqualDeep(try reference(capture, .{}), view.counts);
     try std.testing.expectEqual(@as(u64, 0), view.counts.complete);
-    try std.testing.expect(view.counts.by_reason[@intFromEnum(unwind.Reason.retention_budget)] > 0);
+    try std.testing.expect(view.counts.by_reason[@backingInt(unwind.Reason.retention_budget)] > 0);
     // Without stack bytes the sampled leaf is still named, under its gap node.
     var named_leaves: u64 = 0;
     for (view.graph.nodes.items) |node| if (node.frame.kind == .code and std.mem.eql(u8, node.frame.name, "saved_leaf")) {
@@ -216,7 +216,7 @@ test "identity follows filter and assets; cancellation is an error, not a partia
     defer no_assets.deinit();
     try std.testing.expect(!std.mem.eql(u8, &first.identity, &no_assets.identity));
     try std.testing.expectEqual(@as(u64, 0), no_assets.counts.complete);
-    try std.testing.expect(no_assets.counts.by_reason[@intFromEnum(unwind.Reason.asset_missing)] > 0);
+    try std.testing.expect(no_assets.counts.by_reason[@backingInt(unwind.Reason.asset_missing)] > 0);
     var cancel = std.atomic.Value(bool).init(true);
     try std.testing.expectError(error.ArchiveCancelled, derived.build(a, capture, .{}, &cancel, null));
 }
@@ -294,7 +294,7 @@ test "mapping change at a sample timestamp: ambiguity and replacement stay expli
     var view = try derived.build(a, capture, .{}, null, null);
     defer view.deinit();
     try std.testing.expectEqualDeep(try reference(capture, .{}), view.counts);
-    try std.testing.expect(view.counts.by_reason[@intFromEnum(unwind.Reason.mapping_ambiguous)] > 0);
+    try std.testing.expect(view.counts.by_reason[@backingInt(unwind.Reason.mapping_ambiguous)] > 0);
     // Later samples see the replacement: nothing after it is complete.
     var after = try derived.build(a, capture, .{ .from_ns = change_ns - capture.started_ns + 1 }, null, null);
     defer after.deinit();

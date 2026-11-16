@@ -180,7 +180,7 @@ test "capture progress and bounded startup diagnostic" {
     try std.testing.expectEqual(Capture.Phase.sampling, capture.phase);
     try std.testing.expectEqual(@as(u32, 3), capture.completed);
     try std.testing.expectEqual(@as(u32, 12), capture.total);
-    const message = "x" ** 511 ++ "\u{e9}";
+    const message = @as([511]u8, @splat('x')) ++ "\u{e9}";
     capture.set(.failed, 3, 12, message);
     try std.testing.expectEqual(@as(usize, 511), capture.diagnostic().len);
     capture.set(.ready, 12, 12, "");

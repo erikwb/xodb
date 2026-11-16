@@ -66,7 +66,7 @@ pub const Files = struct {
     pub fn addRoot(self: *Files, path: []const u8) !void {
         if (self.roots.items.len >= 16) return error.DebugDirectoryLimit;
         if (path.len == 0 or path.len > 4096 or path[0] != '/' or std.mem.indexOfScalar(u8, path, 0) != null) return error.InvalidDebugDirectory;
-        const copy = try self.allocator.dupeZ(u8, path);
+        const copy = try self.allocator.dupeSentinel(u8, path, 0);
         errdefer self.allocator.free(copy);
         try self.roots.append(self.allocator, copy);
         self.lookup_revision +|= 1;
@@ -80,7 +80,7 @@ pub const Files = struct {
         errdefer snapshot.free(bytes);
         const image = try elf.Image.parse(bytes);
         if (image.sectionByName(".debug_info") == null and image.sectionByName(".zdebug_info") == null) return error.DebugFileMissingDwarf;
-        const name = try self.allocator.dupeZ(u8, path);
+        const name = try self.allocator.dupeSentinel(u8, path, 0);
         errdefer self.allocator.free(name);
         const file = try self.allocator.create(File);
         file.* = .{ .path = name, .image = image, .bytes = bytes, .build_id = image.buildId() orelse &.{} };
@@ -113,7 +113,7 @@ pub const Files = struct {
             if (!std.mem.eql(u8, id, file.build_id)) return error.DebugFileBuildIdMismatch;
         } else if (crc == null) return error.DebugFileMissingBuildId;
         if (crc) |expected| {
-            if (file.crc == null) file.crc = std.hash.crc.Crc32.hash(file.bytes);
+            if (file.crc == null) file.crc = std.hash.crc.@"CRC-32/ISO-HDLC".hash(file.bytes);
             if (file.crc.? != expected) return error.DebugFileCrcMismatch;
         }
     }

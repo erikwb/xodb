@@ -28,8 +28,8 @@ pub const Browser = struct {
     }
     fn matchesMode(self: *const Browser, e: model.Catalog.Entry, fleet: bool) bool {
         if (self.agent != 0 and !std.mem.eql(u8, agents[self.agent], e.agent)) return false;
-        if (self.project_len > 0 and std.ascii.indexOfIgnoreCase(e.project, self.project[0..self.project_len]) == null) return false;
-        if (self.query_len > 0 and std.ascii.indexOfIgnoreCase(e.title, self.query[0..self.query_len]) == null and std.ascii.indexOfIgnoreCase(e.project, self.query[0..self.query_len]) == null) return false;
+        if (self.project_len > 0 and std.ascii.findIgnoreCase(e.project, self.project[0..self.project_len]) == null) return false;
+        if (self.query_len > 0 and std.ascii.findIgnoreCase(e.title, self.query[0..self.query_len]) == null and std.ascii.findIgnoreCase(e.project, self.query[0..self.query_len]) == null) return false;
         if (self.dates_len > 0) {
             const dates = self.dates[0..self.dates_len];
             const split = std.mem.indexOf(u8, dates, "..");

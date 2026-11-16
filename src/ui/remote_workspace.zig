@@ -436,11 +436,11 @@ pub const Frontend = struct {
             const value = publication.value;
             if (value.omitted != 0 or value.debugger_omitted != 0) {
                 try stream.writeAll("View limit; unavailable:");
-                inline for (@typeInfo(boundary.Presentation).@"struct".fields, 0..) |field, index| {
-                    if (value.omitted & (@as(u64, 1) << index) != 0) try stream.print(" {s}", .{field.name});
+                inline for (@typeInfo(boundary.Presentation).@"struct".field_names, 0..) |field_name, index| {
+                    if (value.omitted & (@as(u64, 1) << index) != 0) try stream.print(" {s}", .{field_name});
                 }
-                inline for (@typeInfo(@TypeOf(self.display)).@"struct".fields, 0..) |field, index| {
-                    if (value.debugger_omitted & (@as(u32, 1) << index) != 0) try stream.print(" {s}", .{field.name});
+                inline for (@typeInfo(@TypeOf(self.display)).@"struct".field_names, 0..) |field_name, index| {
+                    if (value.debugger_omitted & (@as(u32, 1) << index) != 0) try stream.print(" {s}", .{field_name});
                 }
             } else if (value.status == .failed or value.status == .disconnected) {
                 try stream.print("Remote view {s}: {s}", .{ @tagName(value.status), value.diagnostic });

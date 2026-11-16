@@ -33,7 +33,7 @@ fn cstr(bytes: []const u8) []const u8 {
 fn errnoOf(rc: usize) i32 {
     const err = linux.errno(rc);
     if (err == .SUCCESS) return 0;
-    return @intFromEnum(err);
+    return @backingInt(err);
 }
 
 fn openErrno(path: [*:0]const u8) i32 {
@@ -70,12 +70,12 @@ fn parseU64(text: []const u8) ?u64 {
 }
 
 fn load64(map: []const u8, off: usize) u64 {
-    const ptr: *const u64 = @alignCast(@ptrCast(map.ptr + off));
+    const ptr: *const u64 = @ptrCast(@alignCast(map.ptr + off));
     return @atomicLoad(u64, ptr, .acquire);
 }
 
 fn storeTail(map: []u8, tail: u64) void {
-    const ptr: *u64 = @alignCast(@ptrCast(map.ptr + 1032));
+    const ptr: *u64 = @ptrCast(@alignCast(map.ptr + 1032));
     @atomicStore(u64, ptr, tail, .seq_cst);
 }
 
@@ -84,7 +84,7 @@ fn readPlain(map: []const u8, off: usize) u64 {
 }
 
 const Owned = struct {
-    fds: [8]i32 = .{-1} ** 8,
+    fds: [8]i32 = @splat(-1),
     nfd: u8 = 0,
     maps: [2]struct { ptr: ?[*]u8 = null, len: usize = 0 } = .{ .{}, .{} },
     child: i32 = -1,
@@ -100,7 +100,7 @@ const Owned = struct {
     fn finish(self: *Owned) void {
         if (self.child > 0) {
             _ = linux.kill(self.child, linux.SIG.KILL);
-            var status: u32 = 0;
+            var status: i32 = 0;
             var spins: u16 = 0;
             while (spins < 1000) : (spins += 1) {
                 const rc = linux.waitpid(self.child, &status, linux.W.NOHANG);
@@ -231,7 +231,7 @@ fn drain(map: []u8, linear: []u8, kind: obs.Kind, expect_id: ?u64, tid: i32, sid
     var dst: usize = 0;
     while (left > 0) {
         const chunk = @min(left, data_size - src);
-        @memcpy(linear[dst .. dst + chunk], map[data_off + src ..][0 .. chunk]);
+        @memcpy(linear[dst .. dst + chunk], map[data_off + src ..][0..chunk]);
         dst += chunk;
         src = 0;
         left -= chunk;
@@ -392,8 +392,8 @@ fn openTrace(attr_config: u64, tid: i32, owned: *Owned) ?i32 {
 fn run(fixture: [:0]const u8, scratch: [:0]const u8, mode: [:0]const u8, enter_id: u64, exit_id: u64) u8 {
     var owned = Owned{};
     defer owned.finish();
-    var ready: [2]i32 = .{-1} ** 2;
-    var go: [2]i32 = .{-1} ** 2;
+    var ready: [2]i32 = @splat(-1);
+    var go: [2]i32 = @splat(-1);
     defer {
         if (ready[0] >= 0) _ = linux.close(ready[0]);
         if (ready[1] >= 0) _ = linux.close(ready[1]);
@@ -526,8 +526,8 @@ fn run(fixture: [:0]const u8, scratch: [:0]const u8, mode: [:0]const u8, enter_i
 }
 
 fn handshake(fixture: [:0]const u8, scratch: [:0]const u8, mode: [:0]const u8) u8 {
-    var ready: [2]i32 = .{-1} ** 2;
-    var go: [2]i32 = .{-1} ** 2;
+    var ready: [2]i32 = @splat(-1);
+    var go: [2]i32 = @splat(-1);
     defer {
         if (ready[0] >= 0) _ = linux.close(ready[0]);
         if (ready[1] >= 0) _ = linux.close(ready[1]);
@@ -563,7 +563,7 @@ fn mapFd(fd: i32, len: usize) ?[*]u8 {
 
 fn reap(pid: i32, budget_ns: u64) bool {
     const start = mono();
-    var status: u32 = 0;
+    var status: i32 = 0;
     while (mono() - start < budget_ns) {
         const rc = linux.waitpid(pid, &status, linux.W.NOHANG);
         const err = linux.errno(rc);

@@ -17,7 +17,7 @@ pub const Keyboard = struct {
     focus_revision: u64 = 0,
     trace: bool = false,
     current: Mods = .{},
-    held: std.StaticBitSet(768) = .initEmpty(),
+    held: std.StaticBitSet(768) = .empty,
     held_shortcut: [768]u32 = @splat(0),
 
     pub fn init() Keyboard {
@@ -38,7 +38,7 @@ pub const Keyboard = struct {
         self.focused = focused;
         self.focus_revision +%= 1;
         self.current = .{};
-        self.held = .initEmpty();
+        self.held = .empty;
     }
     pub fn translated(self: *Keyboard, event: Event) void {
         self.current = event.mods;

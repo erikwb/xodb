@@ -10,16 +10,7 @@ const Budget = @import("../profile/archive_budget.zig").Budget;
 const progress = @import("../profile/archive_progress.zig");
 pub const Progress = progress.Progress;
 const Allocator = std.mem.Allocator;
-const c = @cImport({
-    @cUndef("_FORTIFY_SOURCE"); // glibc's variadic fcntl wrappers cannot translate.
-    @cDefine("_GNU_SOURCE", "1");
-    @cInclude("unistd.h");
-    @cInclude("fcntl.h");
-    @cInclude("errno.h");
-    @cInclude("sys/stat.h");
-    @cInclude("time.h");
-    @cInclude("stdlib.h");
-});
+const c = @import("c_observe_archive");
 
 pub const magic = "XODBINVOC\x01\r\n";
 pub const algorithm = "xodb-invocation-pairing-v1";
@@ -57,15 +48,15 @@ pub const Evidence = struct {
     associations: ?@import("association_evidence.zig").Snapshot = null,
     pub fn jsonStringify(self: Evidence, writer: *std.json.Stringify) !void {
         try writer.beginObject();
-        inline for (@typeInfo(Evidence).@"struct".fields) |field| {
-            if (comptime std.mem.eql(u8, field.name, "associations")) {
+        inline for (@typeInfo(Evidence).@"struct".field_names) |field_name| {
+            if (comptime std.mem.eql(u8, field_name, "associations")) {
                 if (self.associations != null) {
-                    try writer.objectField(field.name);
+                    try writer.objectField(field_name);
                     try writer.write(self.associations);
                 }
             } else {
-                try writer.objectField(field.name);
-                try writer.write(@field(self, field.name));
+                try writer.objectField(field_name);
+                try writer.write(@field(self, field_name));
             }
         }
         try writer.endObject();
@@ -324,7 +315,7 @@ fn publishInner(path: [:0]const u8, bytes: []const u8, state: ?*Progress, result
     var now: c.struct_timespec = undefined;
     if (c.clock_gettime(c.CLOCK_MONOTONIC, &now) != 0) return error.ArchiveClockFailed;
     var buffer: [max_path + 96]u8 = undefined;
-    const temporary = try std.fmt.bufPrintZ(&buffer, "{s}.xoi-{d}-{d}-{d}.tmp", .{ path, c.getpid(), now.tv_sec, now.tv_nsec });
+    const temporary = try std.fmt.bufPrintSentinel(&buffer, "{s}.xoi-{d}-{d}-{d}.tmp", .{ path, c.getpid(), now.tv_sec, now.tv_nsec }, 0);
     const fd = c.open(temporary.ptr, c.O_WRONLY | c.O_CREAT | c.O_EXCL | c.O_CLOEXEC | c.O_NOFOLLOW, @as(c_uint, 0o644));
     if (fd < 0) return error.ArchiveOpenFailed;
     defer if (c.unlink(temporary.ptr) != 0) {
@@ -646,7 +637,7 @@ test "observation archive publication preserves existing files and cleans tempor
     }
     try std.testing.expectEqual(@as(c_int, 0), c.chmod(directory, 0o755));
     var path_buffer: [max_path]u8 = undefined;
-    const path = try std.fmt.bufPrintZ(&path_buffer, "{s}/evidence.xoi", .{std.mem.span(directory)});
+    const path = try std.fmt.bufPrintSentinel(&path_buffer, "{s}/evidence.xoi", .{std.mem.span(directory)}, 0);
     defer {
         _ = c.unlink(path.ptr);
     }
@@ -672,7 +663,7 @@ test "observation archive publication preserves existing files and cleans tempor
     var cancelled = Progress{};
     cancelled.cancel.store(true, .release);
     var cancelled_buffer: [max_path]u8 = undefined;
-    const cancelled_path = try std.fmt.bufPrintZ(&cancelled_buffer, "{s}/cancelled.xoi", .{std.mem.span(directory)});
+    const cancelled_path = try std.fmt.bufPrintSentinel(&cancelled_buffer, "{s}/cancelled.xoi", .{std.mem.span(directory)}, 0);
     const interrupted = publish(cancelled_path, bytes, &cancelled);
     try std.testing.expectEqualStrings("ArchiveCancelled", interrupted.error_name.?);
     try std.testing.expectEqual(.not_published, interrupted.state);
@@ -950,8 +941,8 @@ test "association archive workers cancel open and save without partial publicati
     defer _ = c.rmdir(raw);
     var input_buffer: [256]u8 = undefined;
     var output_buffer: [256]u8 = undefined;
-    const input = try std.fmt.bufPrintZ(&input_buffer, "{s}/input.xoi", .{dir});
-    const output = try std.fmt.bufPrintZ(&output_buffer, "{s}/output.xoi", .{dir});
+    const input = try std.fmt.bufPrintSentinel(&input_buffer, "{s}/input.xoi", .{dir}, 0);
+    const output = try std.fmt.bufPrintSentinel(&output_buffer, "{s}/output.xoi", .{dir}, 0);
     defer _ = c.unlink(input.ptr);
     const bytes = try associatedFixture(a, false, false);
     defer a.free(bytes);
@@ -1069,8 +1060,8 @@ test "failed association retains a saved snapshot or saves invocation only; runn
     defer _ = c.rmdir(raw);
     var input_buffer: [256]u8 = undefined;
     var output_buffer: [256]u8 = undefined;
-    const input = try std.fmt.bufPrintZ(&input_buffer, "{s}/input.xoi", .{std.mem.span(raw)});
-    const output = try std.fmt.bufPrintZ(&output_buffer, "{s}/output.xoi", .{std.mem.span(raw)});
+    const input = try std.fmt.bufPrintSentinel(&input_buffer, "{s}/input.xoi", .{std.mem.span(raw)}, 0);
+    const output = try std.fmt.bufPrintSentinel(&output_buffer, "{s}/output.xoi", .{std.mem.span(raw)}, 0);
     defer _ = c.unlink(input.ptr);
     defer _ = c.unlink(output.ptr);
     const bytes = try associatedFixture(a, false, false);

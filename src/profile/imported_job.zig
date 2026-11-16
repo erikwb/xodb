@@ -110,7 +110,7 @@ pub const State = struct {
         const job = try a.create(Job);
         job.* = .{};
         errdefer job.deinit();
-        job.path = try a.dupeZ(u8, path);
+        job.path = try a.dupeSentinel(u8, path, 0);
         try job.start();
         return .{ .load_job = job };
     }

@@ -14,7 +14,7 @@ pub fn parse(stat: []const u8) !u64 {
 pub fn validate(id: Identity) !void {
     if (id.pid <= 1 or id.start == 0) return error.InvalidProcessIdentity;
     var path: [64]u8 = undefined;
-    const name = try std.fmt.bufPrintZ(&path, "/proc/{d}/stat", .{id.pid});
+    const name = try std.fmt.bufPrintSentinel(&path, "/proc/{d}/stat", .{id.pid}, 0);
     const fd = c.open(name.ptr, c.O_RDONLY | c.O_CLOEXEC);
     if (fd < 0) return error.ProcessIdentityUnavailable;
     defer _ = c.close(fd);

@@ -340,7 +340,7 @@ fn watchValue(session: *const Context, a: A, capture: *WatchCapture, f: Frame, r
     capture.reads = r.reads;
     capture.bytes = r.bytes;
     if (row != null and raw.key_valid != 0) {
-        capture.expression = try a.dupeZ(u8, std.mem.sliceTo(&raw.name, 0));
+        capture.expression = try a.dupeSentinel(u8, std.mem.sliceTo(&raw.name, 0), 0);
         capture.scope.runtime[2] = @as(u32, @bitCast(raw.key.scope_start)) | (@as(u64, @as(u32, @bitCast(raw.key.scope_end))) << 32);
         capture.scope.runtime[3] = raw.key.scope_type;
         capture.scope.frame[1] = raw.key.shared_id;
@@ -348,7 +348,7 @@ fn watchValue(session: *const Context, a: A, capture: *WatchCapture, f: Frame, r
         capture.scope.frame[3] = raw.key.slot;
     }
     if (raw.reason != null) {
-        capture.diagnostic = try a.dupeZ(u8, std.mem.span(raw.reason));
+        capture.diagnostic = try a.dupeSentinel(u8, std.mem.span(raw.reason), 0);
         if (raw.gone != 0) capture.observation = c.XLW_FRAME_GONE;
         return;
     }
@@ -359,7 +359,7 @@ pub fn watchExpression(a: A, expression: ?[]const u8, row: ?usize) ![:0]const u8
     if ((expression == null) == (row == null)) return error.InvalidArguments;
     if (expression != null) return error.JavaScriptLexicalUnproved;
     if (row.? >= c.XJS_CONTEXT_BINDINGS) return error.InvalidArguments;
-    return try a.dupeZ(u8, "context");
+    return try a.dupeSentinel(u8, "context", 0);
 }
 pub fn createWatch(session: *const Context, a: A, observed: Stack, tid: i32, segment_index: usize, frame: usize, checked_expression: [:0]const u8, row: ?usize) !WatchCapture {
     try session.languages.require(.javascript);
@@ -392,7 +392,7 @@ pub fn observeWatch(session: *const Context, a: A, observed: Stack, scope: c.str
         for (segment.frames) |frame| {
             if (frame.frame_pointer != scope.frame[0]) continue;
             if (frame.reason) |why| {
-                capture.diagnostic = try a.dupeZ(u8, why);
+                capture.diagnostic = try a.dupeSentinel(u8, why, 0);
                 return capture;
             }
             try watchValue(session, a, &capture, frame, null);
@@ -402,8 +402,8 @@ pub fn observeWatch(session: *const Context, a: A, observed: Stack, scope: c.str
     }
     if (saw_runtime) {
         capture.observation = c.XLW_FRAME_GONE;
-        capture.diagnostic = try a.dupeZ(u8, "JavaScriptWatchFrameGone");
-    } else capture.diagnostic = try a.dupeZ(u8, "JavaScriptWatchFrameNotObserved");
+        capture.diagnostic = try a.dupeSentinel(u8, "JavaScriptWatchFrameGone", 0);
+    } else capture.diagnostic = try a.dupeSentinel(u8, "JavaScriptWatchFrameNotObserved", 0);
     try session.expectGeneration(observed.generation);
     return capture;
 }

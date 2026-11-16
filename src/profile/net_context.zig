@@ -146,7 +146,7 @@ pub fn read(a: std.mem.Allocator, pid: i32, when: sockets.When) !sockets.Table {
     var table = sockets.Table{ .when = when, .sampled_ns = now(c.CLOCK_MONOTONIC), .processes = &.{}, .sockets = &.{} };
     var path: [64]u8 = undefined;
     var process = sockets.Process{ .pid = pid };
-    if (readSmall(try std.fmt.bufPrintZ(&path, "/proc/{d}/comm", .{pid}), &process.comm)) |n| {
+    if (readSmall(try std.fmt.bufPrintSentinel(&path, "/proc/{d}/comm", .{pid}, 0), &process.comm)) |n| {
         const name = std.mem.trimEnd(u8, process.comm[0..n], "\n");
         @memset(process.comm[name.len..], 0);
     } else table.unreadable += 1;
@@ -156,7 +156,7 @@ pub fn read(a: std.mem.Allocator, pid: i32, when: sockets.When) !sockets.Table {
     // Socket inodes this process holds.
     var held: std.ArrayList(Held) = .empty;
     var usb_fds: std.ArrayList(sockets.UsbFd) = .empty;
-    const dir = c.opendir((try std.fmt.bufPrintZ(&path, "/proc/{d}/fd", .{pid})).ptr) orelse {
+    const dir = c.opendir((try std.fmt.bufPrintSentinel(&path, "/proc/{d}/fd", .{pid}, 0)).ptr) orelse {
         table.unreadable += 1;
         return table;
     };
@@ -165,7 +165,7 @@ pub fn read(a: std.mem.Allocator, pid: i32, when: sockets.When) !sockets.Table {
         const name = std.mem.sliceTo(@as([*:0]const u8, @ptrCast(&entry.*.d_name)), 0);
         const fd = std.fmt.parseInt(i32, name, 10) catch continue;
         var link: [64]u8 = undefined;
-        const n = c.readlink((try std.fmt.bufPrintZ(&path, "/proc/{d}/fd/{d}", .{ pid, fd })).ptr, &link, link.len);
+        const n = c.readlink((try std.fmt.bufPrintSentinel(&path, "/proc/{d}/fd/{d}", .{ pid, fd }, 0)).ptr, &link, link.len);
         if (n <= 0) continue;
         const target = link[0..@intCast(n)];
         if (sockets.usbDevicePath(target)) |usb| {
@@ -189,7 +189,7 @@ pub fn read(a: std.mem.Allocator, pid: i32, when: sockets.When) !sockets.Table {
     for ([_]struct { []const u8, sockets.Protocol, @import("../evidence/decode.zig").Family }{
         .{ "tcp", .tcp, .ipv4 }, .{ "tcp6", .tcp, .ipv6 }, .{ "udp", .udp, .ipv4 }, .{ "udp6", .udp, .ipv6 },
     }) |kind| {
-        const len = readSmall(try std.fmt.bufPrintZ(&path, "/proc/{d}/net/{s}", .{ pid, kind[0] }), text) orelse {
+        const len = readSmall(try std.fmt.bufPrintSentinel(&path, "/proc/{d}/net/{s}", .{ pid, kind[0] }, 0), text) orelse {
             table.unreadable += 1;
             continue;
         };

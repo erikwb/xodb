@@ -1197,7 +1197,7 @@ pub fn layoutAlloc(sections: []const AllocSec, out: []Place) void {
         .{ .need = shf_ro_after | shf_alloc, .excl = 0, .core = 3, .init_kind = 255 },
         .{ .need = shf_write | shf_alloc, .excl = 0, .core = 1, .init_kind = 5 },
     };
-    var cursor = [_]u64{0} ** 7;
+    var cursor = @as([7]u64, @splat(0));
     for (out) |*slot| slot.* = .{};
     for (masks) |mask| {
         for (sections, 0..) |sec, index| {
@@ -2019,14 +2019,14 @@ test "module layout puts data after the earlier writable sections" {
 }
 
 test "KGHANG a reader-owned rwsem names no owner" {
-    const tasks = [_]TaskRow{.{ .address = 0x1000, .pid = 7, .comm = "writer".* ++ [_]u8{0} ** 10, .comm_len = 6 }};
+    const tasks = [_]TaskRow{.{ .address = 0x1000, .pid = 7, .comm = "writer".* ++ @as([10]u8, @splat(0)), .comm_len = 6 }};
     var buf: [128]u8 = undefined;
     const text = formatWait(.{ .waiter = 0x1000, .lock = 0x5000, .kind = .rwsem, .owner = 0, .readers = true }, &tasks, &buf);
     try std.testing.expectEqualStrings("writer waits on rwsem 0x5000 held by readers (readers are not tracked)", text);
 }
 
 test "KGHANG a wait list that cycles without its head gives no edge" {
-    var mem = [_]u8{0} ** 0x1000;
+    var mem = @as([0x1000]u8, @splat(0));
     putU64(&mem, 0x100, 0x200); // the waiter's list node points into a loop
     putU64(&mem, 0x200, 0x300);
     putU64(&mem, 0x300, 0x200); // never returns to 0x100
@@ -2037,7 +2037,7 @@ test "KGHANG a wait list that cycles without its head gives no edge" {
 }
 
 test "KGHANG a reader-owned rwsem gives a readers edge, not the last reader" {
-    var mem = [_]u8{0} ** 0x1000;
+    var mem = @as([0x1000]u8, @splat(0));
     putU64(&mem, 0x200, 0x510); // waiter node on the stack -> the lock's wait_list
     putU64(&mem, 0x510, 0x200); // and back: the list is closed
     putU64(&mem, 0x500, 0x181); // owner word: last reader 0x180 | RWSEM_READER_OWNED
@@ -2057,7 +2057,7 @@ fn named(address: u64, pid: i32, name: []const u8) TaskRow {
 }
 
 test "KGHANG an owner that is not a walked task is named unknown" {
-    var mem = [_]u8{0} ** 0x1000;
+    var mem = @as([0x1000]u8, @splat(0));
     putU64(&mem, 0x200, 0x510);
     putU64(&mem, 0x510, 0x200);
     putU64(&mem, 0x500, 0);
@@ -2079,7 +2079,7 @@ test "KGHANG an owner that is not a walked task is named unknown" {
 }
 
 test "KGHANG blocked_on that matches no lock type is an unknown lock" {
-    var mem = [_]u8{0} ** 0x6020;
+    var mem = @as([0x6020]u8, @splat(0));
     const facts = Facts{
         .list_next = 0,
         .name_off = 0,

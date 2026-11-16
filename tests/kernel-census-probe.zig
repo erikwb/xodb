@@ -1,13 +1,7 @@
 //! Small static live probe of the same collector, for disposable lab guests.
 const std = @import("std");
 const census = @import("census");
-const c = @cImport({
-    @cUndef("_FORTIFY_SOURCE");
-    @cInclude("unistd.h");
-    @cInclude("fcntl.h");
-    @cInclude("sys/mount.h");
-    @cInclude("sys/stat.h");
-});
+const c = @import("c_probe");
 fn blocked(fd: c_int) void {
     var byte: u8 = 0;
     _ = c.read(fd, &byte, 1);

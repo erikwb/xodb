@@ -295,7 +295,7 @@ pub const State = struct {
         }
         if (self.pending != null) return error.SymbolDiscoveryPending;
         if (existing == null and self.entries.items.len >= max_entries) return error.PeMetadataIdentityLimit;
-        const path = try a.dupeZ(u8, region.path);
+        const path = try a.dupeSentinel(u8, region.path, 0);
         defer a.free(path);
         const request = c.struct_xrt_file_request{ .kind = c.XRT_FILE_MAPPED, .mapping = .{
             .start = region.start,
@@ -345,7 +345,7 @@ pub const State = struct {
         const entry = existing orelse blk: {
             const item = try a.create(Entry);
             errdefer a.destroy(item);
-            item.* = .{ .start = region.start, .end = region.end, .inode = region.inode, .device_major = region.device_major, .device_minor = region.device_minor, .path = try a.dupeZ(u8, path), .file = file, .source = Source.fromRuntime(@intCast(c.xrt_file_view_source(view))) };
+            item.* = .{ .start = region.start, .end = region.end, .inode = region.inode, .device_major = region.device_major, .device_minor = region.device_minor, .path = try a.dupeSentinel(u8, path, 0), .file = file, .source = Source.fromRuntime(@intCast(c.xrt_file_view_source(view))) };
             errdefer a.free(item.path);
             try self.entries.ensureUnusedCapacity(a, 1);
             try self.anchors.put(a, item.start, item);
@@ -475,14 +475,7 @@ fn fixtureIdentity(fd: c_int) !c.struct_xrt_file_identity {
 }
 
 test "PE aliases share parsed identity and eviction reloads only on demand" {
-    const native = @cImport({
-        @cDefine("_GNU_SOURCE", "1");
-        @cInclude("target_internal.h");
-        @cInclude("stdlib.h");
-        @cInclude("sys/mman.h");
-        @cInclude("sys/sysmacros.h");
-        @cInclude("sys/stat.h");
-    });
+    const native = @import("c_model_modules");
     const a = std.testing.allocator;
     const fd = native.memfd_create("shared-pe", native.MFD_CLOEXEC);
     try std.testing.expect(fd >= 0);
@@ -571,15 +564,7 @@ test "PE aliases share parsed identity and eviction reloads only on demand" {
 }
 
 test "PE cache retains large images beside small jobs and retries only under pressure" {
-    const native = @cImport({
-        @cDefine("_GNU_SOURCE", "1");
-        @cInclude("target_internal.h");
-        @cInclude("stdlib.h");
-        @cInclude("sys/mman.h");
-        @cInclude("sys/sysmacros.h");
-        @cInclude("sys/stat.h");
-        @cInclude("sys/resource.h");
-    });
+    const native = @import("c_model_pe_images_1");
     const a = std.testing.allocator;
     const rss = struct {
         fn bytes() !u64 {
@@ -721,14 +706,7 @@ test "PE departed records are reclaimed across more than the identity cap" {
 }
 
 test "PE join refusal releases the reservation and reports a terminal error" {
-    const native = @cImport({
-        @cDefine("_GNU_SOURCE", "1");
-        @cInclude("target_internal.h");
-        @cInclude("stdlib.h");
-        @cInclude("sys/mman.h");
-        @cInclude("sys/sysmacros.h");
-        @cInclude("sys/stat.h");
-    });
+    const native = @import("c_model_modules");
     const a = std.testing.allocator;
     const fd = native.memfd_create("join-pe", native.MFD_CLOEXEC);
     try std.testing.expect(fd >= 0);

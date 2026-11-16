@@ -5,22 +5,7 @@
 //! until that frame has been accepted.
 const std = @import("std");
 const log = @import("../log.zig");
-const c = @cImport({
-    @cUndef("_FORTIFY_SOURCE"); // as in c_ui.zig
-    @cDefine("_GNU_SOURCE", "1");
-    @cDefine("VK_USE_PLATFORM_XCB_KHR", "1");
-    @cInclude("dlfcn.h");
-    @cInclude("stdlib.h");
-    @cInclude("errno.h");
-    @cInclude("poll.h");
-    @cInclude("time.h");
-    @cInclude("xcb/xcb.h");
-    @cInclude("xcb/randr.h");
-    @cInclude("xcb/xinput.h");
-    @cInclude("xkbcommon/xkbcommon.h");
-    @cInclude("xkbcommon/xkbcommon-x11.h");
-    @cInclude("vulkan/vulkan.h");
-});
+const c = @import("c_platform_x11");
 const vk = @import("../c_ui.zig").api;
 const phases = @import("../startup_phases.zig");
 const platform = @import("window.zig");
@@ -71,7 +56,7 @@ const Atoms = struct {
 
 fn enumInt(value: anytype) u32 {
     return switch (@typeInfo(@TypeOf(value))) {
-        .@"enum" => @intCast(@intFromEnum(value)),
+        .@"enum" => @intCast(@backingInt(value)),
         else => @intCast(value),
     };
 }
@@ -317,7 +302,7 @@ pub const Window = struct {
     input_ready: bool = false,
     xi_opcode: u8 = 0,
     core_pointer: bool = false,
-    down: std.StaticBitSet(256) = .initEmpty(),
+    down: std.StaticBitSet(256) = .empty,
     /// A key arrived for this window during the current pump.
     keyed: bool = false,
     /// A normal FocusOut arrived and has not been applied yet.
@@ -593,7 +578,7 @@ pub const Window = struct {
         if (event.event != self.window) return;
         // Grabs report focus changes that are not a real loss of the keyboard.
         if (event.mode != @as(u8, @intCast(c.XCB_NOTIFY_MODE_NORMAL))) return;
-        self.down = .initEmpty();
+        self.down = .empty;
         if (gained) {
             self.lost_focus = false;
             self.input.enter();
@@ -688,7 +673,7 @@ pub const Window = struct {
 
     fn onClient(self: *Window, event: *c.xcb_client_message_event_t) void {
         if (event.window != self.window) return;
-        if (event.@"type" == self.atoms.wm_protocols and event.data.data32[0] == self.atoms.wm_delete) {
+        if (event.type == self.atoms.wm_protocols and event.data.data32[0] == self.atoms.wm_delete) {
             self.closing = true;
             self.close_reason = .compositor_close;
         }
@@ -823,13 +808,13 @@ pub const Window = struct {
     }
     fn putHints(self: *Window) void {
         // InputHint so the window manager will offer keyboard focus.
-        var hints = [_]u32{0} ** 9;
+        var hints = @as([9]u32, @splat(0));
         hints[0] = 1;
         hints[1] = 1;
         self.put(enumInt(c.XCB_ATOM_WM_HINTS), enumInt(c.XCB_ATOM_WM_HINTS), 32, hints.len, &hints);
     }
     fn putSizeHints(self: *Window) void {
-        var hints = [_]u32{0} ** 18;
+        var hints = @as([18]u32, @splat(0));
         hints[0] = 16; // PMinSize
         const factor = self.scale();
         hints[5] = @intCast(@max(0, platform.minimumSurface(self.minimum_ui[0], factor, 1)));
@@ -847,7 +832,7 @@ pub const Window = struct {
         event.response_type = c.XCB_CLIENT_MESSAGE;
         event.format = 32;
         event.window = self.window;
-        event.@"type" = kind;
+        event.type = kind;
         event.data.data32 = data;
         _ = api.send_event(conn, 0, self.root, enumInt(c.XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT) | enumInt(c.XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY), @ptrCast(&event));
         _ = api.flush(conn);
@@ -1079,7 +1064,7 @@ pub const Window = struct {
         const conn = self.clip_conn orelse return self.failPaste();
         _ = api.delete_property(conn, self.clip_window, property);
         _ = api.flush(conn);
-        if (reply.@"type" == self.atoms.incr) return self.failPaste();
+        if (reply.type == self.atoms.incr) return self.failPaste();
         const bytes = propertyBytes(reply);
         const n = @min(bytes.len, clip.limit);
         if (n > 0) @memcpy(self.paste.bytes[0..n], bytes[0..n]);

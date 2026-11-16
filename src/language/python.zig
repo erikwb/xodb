@@ -461,7 +461,7 @@ pub fn readLocals(session: *const Context, a: A, observed: Stack, tid: i32, segm
 }
 /// Pure syntax preparation; the owner calls this before cached-stack access.
 pub fn checkExpression(a: A, expression: []const u8) !void {
-    if (c.xpy_expression_valid(try a.dupeZ(u8, expression)) == 0) return error.UnsupportedLanguageExpression;
+    if (c.xpy_expression_valid(try a.dupeSentinel(u8, expression, 0)) == 0) return error.UnsupportedLanguageExpression;
 }
 pub fn evaluateLocal(session: *const Context, a: A, observed: Stack, tid: i32, segment: usize, frame: usize, expression: []const u8) !@import("locals_types.zig").Result {
     try session.languages.require(.python);
@@ -489,16 +489,16 @@ fn watchValue(session: *const Context, a: A, module: Module, capture: *WatchCapt
     } else c.xpy_local_find(layout, &r, capture.scope.frame[0], capture.scope.frame[1], capture.expression, raw);
     if (raw.reason != null or raw.count != 1) {
         const why: [*c]const u8 = if (raw.reason != null) raw.reason else "PythonWatchBindingUnavailable";
-        capture.diagnostic = try a.dupeZ(u8, std.mem.span(why));
+        capture.diagnostic = try a.dupeSentinel(u8, std.mem.span(why), 0);
         return;
     }
     const item = &raw.items[0];
     if (item.name_reason != null) {
-        capture.diagnostic = try a.dupeZ(u8, std.mem.span(item.name_reason));
+        capture.diagnostic = try a.dupeSentinel(u8, std.mem.span(item.name_reason), 0);
         return;
     }
     if (row != null) {
-        capture.expression = try a.dupeZ(u8, std.mem.sliceTo(&item.name, 0));
+        capture.expression = try a.dupeSentinel(u8, std.mem.sliceTo(&item.name, 0), 0);
         if (capture.expression.len == 0 or capture.expression.len > c.XLW_EXPRESSION) return error.PythonWatchNameTooLong;
         capture.scope.frame[2] |= watch_binding;
         capture.scope.frame[3] = item.ordinal;
@@ -507,17 +507,17 @@ fn watchValue(session: *const Context, a: A, module: Module, capture: *WatchCapt
     var length: usize = 0;
     var kind: c.enum_xpy_sample_kind = undefined;
     if (c.xpy_local_sample(layout, &r, item, bytes.ptr, bytes.len, &length, &kind)) |why| {
-        capture.diagnostic = try a.dupeZ(u8, std.mem.span(why));
+        capture.diagnostic = try a.dupeSentinel(u8, std.mem.span(why), 0);
         return;
     }
     capture.observation = c.XLW_COMPLETE;
-    capture.sample = .{ .kind = kind, .bytes = bytes.ptr, .size = length, .type = (try a.dupeZ(u8, std.mem.sliceTo(&item.value.type, 0))).ptr, .display = (try a.dupeZ(u8, std.mem.sliceTo(&item.value.display, 0))).ptr };
+    capture.sample = .{ .kind = kind, .bytes = bytes.ptr, .size = length, .type = (try a.dupeSentinel(u8, std.mem.sliceTo(&item.value.type, 0), 0)).ptr, .display = (try a.dupeSentinel(u8, std.mem.sliceTo(&item.value.display, 0), 0)).ptr };
 }
 pub fn watchExpression(a: A, expression: ?[]const u8, row: ?usize) ![:0]const u8 {
     if ((expression == null) == (row == null)) return error.InvalidArguments;
     if (expression) |query| if (query.len == 0 or query.len > c.XLW_EXPRESSION or std.mem.indexOfScalar(u8, query, 0) != null) return error.InvalidArguments;
     if (row) |index| if (index >= c.XPY_MAX_LOCALS) return error.InvalidArguments;
-    const checked_expression = try a.dupeZ(u8, expression orelse "binding");
+    const checked_expression = try a.dupeSentinel(u8, expression orelse "binding", 0);
     if (expression != null and c.xpy_expression_valid(checked_expression) == 0) return error.UnsupportedLanguageExpression;
     return checked_expression;
 }
@@ -553,7 +553,7 @@ pub fn observeWatch(session: *const Context, a: A, observed_result: anyerror!Sta
         capture.runtime_identity = dormant.identity;
         // Keep the last sample as history. Without a canonical thread frame,
         // do not dereference its remembered address or declare it retired.
-        capture.diagnostic = try a.dupeZ(u8, if (dormant.module.id == scope.runtime[0]) "RuntimeNotSeenExecuting" else "PythonWatchRuntimeChanged");
+        capture.diagnostic = try a.dupeSentinel(u8, if (dormant.module.id == scope.runtime[0]) "RuntimeNotSeenExecuting" else "PythonWatchRuntimeChanged", 0);
         if (dormant.module.id != scope.runtime[0]) capture.scope.runtime[0] = dormant.module.id;
         return capture;
     };
@@ -561,7 +561,7 @@ pub fn observeWatch(session: *const Context, a: A, observed_result: anyerror!Sta
     capture.runtime_identity = .witnessed;
     if (module_id != scope.runtime[0]) {
         capture.scope.runtime[0] = module_id;
-        capture.diagnostic = try a.dupeZ(u8, "PythonWatchRuntimeChanged");
+        capture.diagnostic = try a.dupeSentinel(u8, "PythonWatchRuntimeChanged", 0);
         return capture;
     }
     var saw_state = false;
@@ -572,7 +572,7 @@ pub fn observeWatch(session: *const Context, a: A, observed_result: anyerror!Sta
             try std.fmt.parseInt(u64, instance.thread_state, 0) != scope.runtime[3]) continue;
         if (instance.interpreter_id != scope.runtime[2]) {
             capture.scope.runtime[2] = instance.interpreter_id;
-            capture.diagnostic = try a.dupeZ(u8, "PythonWatchRuntimeChanged");
+            capture.diagnostic = try a.dupeSentinel(u8, "PythonWatchRuntimeChanged", 0);
             return capture;
         }
         saw_state = true;
@@ -580,7 +580,7 @@ pub fn observeWatch(session: *const Context, a: A, observed_result: anyerror!Sta
         for (segment.frames) |frame| {
             if (try std.fmt.parseInt(u64, frame.frame_address, 0) != scope.frame[0]) continue;
             if (!frame.identity_proved) {
-                capture.diagnostic = try a.dupeZ(u8, frame.reason orelse "PythonWatchFrameUnproved");
+                capture.diagnostic = try a.dupeSentinel(u8, frame.reason orelse "PythonWatchFrameUnproved", 0);
                 return capture;
             }
             if (try std.fmt.parseInt(u64, frame.code, 0) != scope.frame[1]) continue;
@@ -593,8 +593,8 @@ pub fn observeWatch(session: *const Context, a: A, observed_result: anyerror!Sta
     // Never read its remembered address or mistake that absence for retirement.
     if (saw_state and complete and scope.frame[2] & watch_generator == 0) {
         capture.observation = c.XLW_FRAME_GONE;
-        capture.diagnostic = try a.dupeZ(u8, "PythonWatchFrameGone");
-    } else capture.diagnostic = try a.dupeZ(u8, if (scope.frame[2] & watch_generator != 0) "PythonWatchGeneratorNotObserved" else "PythonWatchFrameNotObserved");
+        capture.diagnostic = try a.dupeSentinel(u8, "PythonWatchFrameGone", 0);
+    } else capture.diagnostic = try a.dupeSentinel(u8, if (scope.frame[2] & watch_generator != 0) "PythonWatchGeneratorNotObserved" else "PythonWatchFrameNotObserved", 0);
     try session.expectGeneration(observed.generation);
     return capture;
 }
@@ -614,7 +614,7 @@ fn readBindings(session: *const Context, a: A, observed: Stack, tid: i32, segmen
     if (!std.mem.eql(u8, id, try buildId(a, layout))) return error.PythonBuildIdMismatch;
     var r = reader(session);
     const raw = try a.create(c.struct_xpy_locals);
-    if (expression) |query| c.xpy_local_find(layout, &r, frame_address, code, try a.dupeZ(u8, query), raw) else c.xpy_locals_read(layout, &r, frame_address, code, start, limit, raw);
+    if (expression) |query| c.xpy_local_find(layout, &r, frame_address, code, try a.dupeSentinel(u8, query, 0), raw) else c.xpy_locals_read(layout, &r, frame_address, code, start, limit, raw);
     const rows = try a.alloc(named.Row, raw.count);
     for (raw.items[0..raw.count], rows) |item, *out| {
         const value = &item.value;

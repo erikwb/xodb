@@ -1,22 +1,6 @@
 //! Typed Zig values and error translation over the authoritative C runtime.
 const std = @import("std");
-pub const c = @cImport({
-    @cInclude("xrt_memory.h");
-    @cInclude("xrt_arch.h");
-    @cInclude("xrt_process.h");
-    @cInclude("xrt_target.h");
-    @cInclude("xrt_remote.h");
-    @cInclude("xrt_gdbremote.h");
-    @cInclude("xrt_files.h");
-    @cInclude("xrt_source.h");
-    @cInclude("xrt_loader.h");
-    @cInclude("xrt_infcall.h");
-    if (@import("builtin").os.tag == .macos) {
-        @cInclude("xrt_debugserver.h");
-        @cInclude("gdbremote.h");
-        @cInclude("wire_target.h");
-    }
-});
+pub const c = @import("c_target_runtime");
 
 pub const X86Registers = c.struct_xrt_x86_registers;
 pub const ArmRegisters = c.struct_xrt_arm_registers;
@@ -26,7 +10,7 @@ pub const Registers = struct {
         return c.xrt_arch_resolve_id(&self.raw.abi);
     }
     pub fn architecture(self: Registers) @import("arch.zig").Arch {
-        return @enumFromInt(self.raw.abi.machine);
+        return @fromBackingInt(@intCast(self.raw.abi.machine));
     }
     pub fn descriptions(self: Registers) []const c.struct_xrt_register_desc {
         const desc = self.row() orelse return &.{};

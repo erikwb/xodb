@@ -144,9 +144,9 @@ pub fn run(a: std.mem.Allocator, mb: u32, progress: *Progress) !Result {
 fn path(buf: []u8, dir_only: bool) ?[:0]const u8 {
     const leaf = if (dir_only) "" else "/fetch-bench.json";
     if (c.getenv("XDG_STATE_HOME")) |d| if (d[0] == '/')
-        return std.fmt.bufPrintZ(buf, "{s}/xodb{s}", .{ std.mem.span(d), leaf }) catch null;
+        return std.fmt.bufPrintSentinel(buf, "{s}/xodb{s}", .{ std.mem.span(d), leaf }, 0) catch null;
     const home = c.getenv("HOME") orelse return null;
-    return std.fmt.bufPrintZ(buf, "{s}/.local/state/xodb{s}", .{ std.mem.span(home), leaf }) catch null;
+    return std.fmt.bufPrintSentinel(buf, "{s}/.local/state/xodb{s}", .{ std.mem.span(home), leaf }, 0) catch null;
 }
 
 pub fn save(a: std.mem.Allocator, r: Result) !void {
@@ -156,13 +156,13 @@ pub fn save(a: std.mem.Allocator, r: Result) !void {
     var k: usize = 1;
     while (k <= dir.len) : (k += 1) if (k == dir.len or dir[k] == '/') {
         var part: [1024]u8 = undefined;
-        const p = std.fmt.bufPrintZ(&part, "{s}", .{dir[0..k]}) catch return error.NoStateDirectory;
+        const p = std.fmt.bufPrintSentinel(&part, "{s}", .{dir[0..k]}, 0) catch return error.NoStateDirectory;
         _ = c.mkdir(p.ptr, 0o755);
     };
     var fb: [1024]u8 = undefined;
     const file = path(&fb, false).?;
     var tb: [1040]u8 = undefined;
-    const tmp = try std.fmt.bufPrintZ(&tb, "{s}.tmp", .{file});
+    const tmp = try std.fmt.bufPrintSentinel(&tb, "{s}.tmp", .{file}, 0);
     const text = try std.json.Stringify.valueAlloc(a, r, .{});
     defer a.free(text);
     const fd = c.open(tmp.ptr, c.O_WRONLY | c.O_CREAT | c.O_TRUNC | c.O_CLOEXEC, @as(c_uint, 0o644));
@@ -205,8 +205,8 @@ test "a tiny bench run measures every phase, saves and reloads" {
     const a = std.testing.allocator;
     var dir_buf: [256]u8 = undefined;
     const tmp = if (c.getenv("TMPDIR")) |t| std.mem.span(t) else "/tmp";
-    const dir = try std.fmt.bufPrintZ(&dir_buf, "{s}/xodb-fetch-bench-{d}", .{ tmp, c.getpid() });
-    const saved_state = if (c.getenv("XDG_STATE_HOME")) |value| try a.dupeZ(u8, std.mem.span(value)) else null;
+    const dir = try std.fmt.bufPrintSentinel(&dir_buf, "{s}/xodb-fetch-bench-{d}", .{ tmp, c.getpid() }, 0);
+    const saved_state = if (c.getenv("XDG_STATE_HOME")) |value| try a.dupeSentinel(u8, std.mem.span(value), 0) else null;
     defer if (saved_state) |value| a.free(value);
     _ = c.setenv("XDG_STATE_HOME", dir.ptr, 1);
     defer {

@@ -198,7 +198,7 @@ fn mkdirs(path: []const u8) void {
     var at: usize = 1;
     while (true) {
         const slash = std.mem.indexOfScalarPos(u8, path, at, '/') orelse path.len;
-        const p = std.fmt.bufPrintZ(&b, "{s}", .{path[0..slash]}) catch return;
+        const p = std.fmt.bufPrintSentinel(&b, "{s}", .{path[0..slash]}, 0) catch return;
         _ = linux.mkdir(p, 0o755);
         if (slash >= path.len) return;
         at = slash + 1;
@@ -320,8 +320,8 @@ pub const Config = struct {
 const state_prefix = "radio-restore";
 /// One restore file per taken card; R2 wrote a single `radio-restore`.
 fn statePath(buf: []u8, dir: []const u8, iface: ?[]const u8) ?[:0]const u8 {
-    if (iface) |i| return std.fmt.bufPrintZ(buf, "{s}/" ++ state_prefix ++ "-{s}", .{ dir, i }) catch null;
-    return std.fmt.bufPrintZ(buf, "{s}/" ++ state_prefix, .{dir}) catch null;
+    if (iface) |i| return std.fmt.bufPrintSentinel(buf, "{s}/" ++ state_prefix ++ "-{s}", .{ dir, i }, 0) catch null;
+    return std.fmt.bufPrintSentinel(buf, "{s}/" ++ state_prefix, .{dir}, 0) catch null;
 }
 
 /// Restores every card left in the state directory by an earlier session
@@ -346,7 +346,7 @@ pub fn recover(buf: []u8, state_dir: ?[]const u8, roots: cards.Roots) ?[]const u
     for (names[0..n], lens[0..n], 0..) |*nm, len, k| {
         const sep = if (k > 0) "; " else "";
         var pb: [512]u8 = undefined;
-        const path = std.fmt.bufPrintZ(&pb, "{s}/{s}", .{ dir, nm[0..len] }) catch continue;
+        const path = std.fmt.bufPrintSentinel(&pb, "{s}/{s}", .{ dir, nm[0..len] }, 0) catch continue;
         var tb: [1024]u8 = undefined;
         const text = fsx.read(&tb, "{s}", .{path}) orelse continue;
         const saved = Saved.parse(text) orelse {
@@ -1515,7 +1515,7 @@ fn openRelays(dir: []const u8, out: *[64]i32) usize {
         fn f(ctx: Ctx, name: []const u8) bool {
             if (!std.mem.startsWith(u8, name, "spectral_scan") or name.len == "spectral_scan".len or !std.ascii.isDigit(name["spectral_scan".len])) return true;
             var pb: [256]u8 = undefined;
-            const p = std.fmt.bufPrintZ(&pb, "{s}/{s}", .{ ctx.dir, name }) catch return true;
+            const p = std.fmt.bufPrintSentinel(&pb, "{s}/{s}", .{ ctx.dir, name }, 0) catch return true;
             const rc = linux.open(p, .{ .ACCMODE = .RDONLY, .NONBLOCK = true, .CLOEXEC = true }, 0);
             if (linux.errno(rc) != .SUCCESS) return true;
             ctx.out[ctx.n.*] = @intCast(rc);

@@ -15,18 +15,7 @@ const pcap = network.pcap;
 extern fn xrt_spawn_owned_helper(pid: *i32, create: *const fn (*i32, ?*anyopaque) callconv(.c) c_int, context: ?*anyopaque) c_int;
 extern fn xrt_drop_owned_helper(pid: i32) void;
 
-const c = @cImport({
-    @cUndef("_FORTIFY_SOURCE");
-    @cDefine("_GNU_SOURCE", "1");
-    @cInclude("unistd.h");
-    @cInclude("fcntl.h");
-    @cInclude("errno.h");
-    @cInclude("signal.h");
-    @cInclude("poll.h");
-    @cInclude("time.h");
-    @cInclude("sys/prctl.h");
-    @cInclude("sys/wait.h");
-});
+const c = @import("c_capture_live");
 
 fn forkOwned(pid: *i32, _: ?*anyopaque) callconv(.c) c_int {
     // spawn-allow: create callback of xrt_spawn_owned_helper
@@ -255,7 +244,7 @@ pub const Live = struct {
         };
         errdefer self.parser.deinit();
         errdefer a.free(self.interface);
-        const interface_z = try a.dupeZ(u8, interface);
+        const interface_z = try a.dupeSentinel(u8, interface, 0);
         defer a.free(interface_z);
         const argv_dumpcap = [_:null]?[*:0]const u8{ tool.ptr, "-q", "-P", "-s", "65535", "-i", interface_z.ptr, "-w", "-", null };
         const argv_tcpdump = [_:null]?[*:0]const u8{ tool.ptr, "-U", "-n", "-s", "65535", "-i", interface_z.ptr, "-w", "-", null };

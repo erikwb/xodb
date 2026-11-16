@@ -109,10 +109,10 @@ pub const Layout = struct {
     right: f32 = 0,
 
     pub fn visible(self: Layout, p: Pane) bool {
-        return !self.collapsed[@intFromEnum(p)];
+        return !self.collapsed[@backingInt(p)];
     }
     pub fn rect(self: Layout, p: Pane) Rect {
-        return self.panes[@intFromEnum(p)];
+        return self.panes[@backingInt(p)];
     }
     pub fn threadFraction(self: *Layout, fraction: f32) void {
         if (!self.visible(.threads) or !self.visible(.stack)) return;
@@ -146,11 +146,11 @@ pub const Layout = struct {
         for (give_way) |p| {
             if (l.fits(width, height)) break;
             if (pinned == p or (watch and pinned == null and p == .events)) continue;
-            l.collapsed[@intFromEnum(p)] = true;
+            l.collapsed[@backingInt(p)] = true;
         }
         // An explicit reopen can temporarily take the whole body. The source
         // is the last tab to give way, and Alt+1 brings it back.
-        if (!l.fits(width, height) and ((pinned != null and pinned != .source) or watch)) l.collapsed[@intFromEnum(Pane.source)] = true;
+        if (!l.fits(width, height) and ((pinned != null and pinned != .source) or watch)) l.collapsed[@backingInt(Pane.source)] = true;
         const has_tabs = std.mem.indexOfScalar(bool, &l.collapsed, true) != null;
         const floor = height - g.footer - @as(f32, if (has_tabs) g.tab_strip else 0);
         const has_bottom = l.visible(.threads) or l.visible(.stack) or l.visible(.events);
@@ -180,7 +180,7 @@ pub const Layout = struct {
         if (width >= g.toolbar_breakpoint and !dense) {
             for (actions, 0..) |a, i| l.toolbar[i] = .{ .x = a.x, .y = g.toolbar_y, .w = a.w, .h = m.toolbar_height };
         } else {
-            var visible_actions = [_]bool{true} ** actions.len;
+            var visible_actions = @as([actions.len]bool, @splat(true));
             var total: f32 = g.toolbar_x + g.more_reserve;
             for (actions) |a| total += a.w + m.gap;
             var priority: usize = actions.len;
@@ -207,7 +207,7 @@ test "priority collapse and whole toolbar at supported sizes" {
         const l = Layout.compute(size[0], size[1], 0.48, false, null, false);
         var previous = true;
         for (give_way) |p| {
-            const hidden = l.collapsed[@intFromEnum(p)];
+            const hidden = l.collapsed[@backingInt(p)];
             try std.testing.expect(!hidden or previous);
             previous = hidden;
         }
@@ -233,7 +233,7 @@ test "every resize threshold includes gutters and every pane can be reopened" {
     for (640..1281) |width| {
         for ([_]f32{ 400, 480, 500, 700 }) |height| {
             for (0..14) |choice| {
-                const pinned: ?Pane = if (choice % 7 == 6) null else @enumFromInt(choice % 7);
+                const pinned: ?Pane = if (choice % 7 == 6) null else @fromBackingInt(@intCast(choice % 7));
                 const l = Layout.compute(@floatFromInt(width), height, 0.48, false, pinned, choice >= 7);
                 for (l.panes, 0..) |p, i| {
                     try std.testing.expect(p.w >= 0 and p.h >= 0);

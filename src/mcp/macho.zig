@@ -154,7 +154,7 @@ pub fn call(a: A, session: *Session, args: V) !V {
     }
     const wanted: ?[:0]const u8 = if (args.object.get("symbol")) |v| blk: {
         if (v != .string or v.string.len == 0 or v.string.len > c.XMO_MAX_NAME or std.mem.indexOfScalar(u8, v.string, 0) != null) return error.InvalidArguments;
-        break :blk try a.dupeZ(u8, v.string);
+        break :blk try a.dupeSentinel(u8, v.string, 0);
     } else null;
     const wanted_address = try hexArgument(args, "symbol_address");
     const with_sections = if (args.object.get("sections")) |v| (if (v == .bool) v.bool else return error.InvalidArguments) else false;

@@ -185,10 +185,7 @@ pub fn start(a: std.mem.Allocator, config: Config) !Opened {
 }
 
 const builtin = @import("builtin");
-const test_c = if (builtin.is_test) @cImport({
-    @cDefine("_GNU_SOURCE", "1");
-    @cInclude("sys/mman.h");
-}) else struct {};
+const test_c = if (builtin.is_test) @import("c_observe_linux") else struct {};
 const Slot = if (builtin.is_test) kernel.internal.struct_xrt_perf_slot else void;
 fn field(map: []u8, at: usize) *u64 {
     return @ptrCast(@alignCast(map.ptr + at));

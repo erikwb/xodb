@@ -69,7 +69,7 @@ pub const Cache = struct {
     arena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
     key: ?CacheKey = null,
     native: ?[]model.Frame = null,
-    stacks: std.meta.Tuple(&.{ ?Stack(.python), ?Stack(.perl), ?Stack(.lua), ?Stack(.javascript), ?Stack(.ruby), ?Stack(.go), ?Stack(.elisp), ?Stack(.gdscript) }) = .{ null, null, null, null, null, null, null, null },
+    stacks: @Tuple(&.{ ?Stack(.python), ?Stack(.perl), ?Stack(.lua), ?Stack(.javascript), ?Stack(.ruby), ?Stack(.go), ?Stack(.elisp), ?Stack(.gdscript) }) = .{ null, null, null, null, null, null, null, null },
     errors: [8]?anyerror = @splat(null),
     pub fn deinit(self: *Cache) void {
         self.arena.deinit();
@@ -102,7 +102,7 @@ fn cachedNative(session: *model.Session, tid: i32) ![]model.Frame {
 pub fn cachedRead(comptime language: Tab, session: *model.Session, tid: i32) !Stack(language) {
     const cache = &session.language_tabs.cache;
     try cache.prepare(session, tid);
-    const index = @intFromEnum(language) - 2;
+    const index = @backingInt(language) - 2;
     if (cache.errors[index]) |err| return err;
     if (cache.stacks[index] == null) {
         cache.stacks[index] = read(language, session, cache.arena.allocator(), tid) catch |err| {
@@ -221,7 +221,7 @@ pub fn selectNative(session: *model.Session, tid: i32, frame: usize) !void {
     if (offers.count == 1 and !offers.truncated) {
         const offer = offers.items[0];
         // Native locals and registers remain where the user left them.
-        if (@intFromEnum(state.selected) >= 2) state.selected = offer.language;
+        if (@backingInt(state.selected) >= 2) state.selected = offer.language;
         if (offer.first_frame) |first| state.logical_selection = .{
             .generation = generation,
             .tid = tid,

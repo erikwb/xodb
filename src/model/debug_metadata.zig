@@ -216,7 +216,7 @@ pub const State = struct {
         const slot = for (&self.entries) |*item| {
             if (item.* == null) break item;
         } else return error.DebugMetadataJobLimit;
-        const path = try A.dupeZ(u8, region.path);
+        const path = try A.dupeSentinel(u8, region.path, 0);
         errdefer A.free(path);
         const request = c.struct_xrt_file_request{ .kind = c.XRT_FILE_MAPPED, .mapping = .{ .start = region.start, .end = region.end, .offset = region.offset, .inode = region.inode, .device_major = region.device_major, .device_minor = region.device_minor, .path = path } };
         var view: ?*c.struct_xrt_file_view = null;
@@ -229,7 +229,7 @@ pub const State = struct {
             const image_budget = @import("../binary/snapshot.zig");
             const limit = runtime.c.xrt_target_remote_image_limit(modules.target);
             if (identity.size < 4) {
-                modules.rememberMetadataNotElf(region, @bitCast(identity));
+                modules.rememberMetadataNotElf(region, @as(*const runtime.c.struct_xrt_file_identity, @ptrCast(&identity)).*);
                 return error.NotElf;
             }
             const size: u64 = @intCast(identity.size);
@@ -239,7 +239,7 @@ pub const State = struct {
             const container = std.mem.eql(u8, &magic, "PK\x03\x04");
             image_container = container;
             if (!elf and !container) {
-                modules.rememberMetadataNotElf(region, @bitCast(identity));
+                modules.rememberMetadataNotElf(region, @as(*const runtime.c.struct_xrt_file_identity, @ptrCast(&identity)).*);
                 return error.NotElf;
             }
             // Only a complete-file worker feeds the APK/container parser.
@@ -247,14 +247,14 @@ pub const State = struct {
             if (container and !complete_file) return if (coverage == .sections) error.DebugMetadataContainer else error.NotElf;
             // Container budgets apply to one ELF entry, not to the ZIP. The
             // bounded worker preserves it for the existing entry parser.
-            const shared = modules.sharesRemoteImage(@bitCast(identity), coverage);
+            const shared = modules.sharesRemoteImage(@as(*const runtime.c.struct_xrt_file_identity, @ptrCast(&identity)).*, coverage);
             if (!container) try modules.checkImageAllowance(region, size, why, shared);
             const refused: ?image_budget.Refusal = if (size > limit)
                 .{ .size = size, .limit = limit, .which = .remote, .older_agent = limit < image_budget.remote_image_limit }
             else if (!container and (size > image_budget.per_image_limit or (!shared and size > image_budget.remaining()))) image_budget.refusal(size) else null;
             if (refused) |reason| {
                 // Region.path is borrowed from the map snapshot; matching uses identity fields only.
-                self.image_refusals[self.image_refusal_next] = .{ .epoch = self.epoch, .region = region, .size = size, .identity = @bitCast(identity), .reason = reason };
+                self.image_refusals[self.image_refusal_next] = .{ .epoch = self.epoch, .region = region, .size = size, .identity = @as(*const runtime.c.struct_xrt_file_identity, @ptrCast(&identity)).*, .reason = reason };
                 self.image_refusal_next = (self.image_refusal_next + 1) % self.image_refusals.len;
                 if (complete_file) modules.refusal = reason else modules.refuseImage(region, reason);
                 return error.BinarySnapshotLimit;
@@ -268,7 +268,7 @@ pub const State = struct {
         }
         // The worker notices a change only while its view is open. A view
         // reopened over the agent must match the identity stored for this file.
-        try modules.rememberMetadataIdentity(region, @bitCast(identity));
+        try modules.rememberMetadataIdentity(region, @as(*const runtime.c.struct_xrt_file_identity, @ptrCast(&identity)).*);
         var job: ?*c.struct_xmd_job = null;
         const status = if (kind == .image and complete_file)
             (if (modules.cachedTypes(region) != null) c.xmd_start_file_cached(view, &job) else c.xmd_start_file(view, &job))
@@ -283,7 +283,7 @@ pub const State = struct {
         else
             c.xmd_start_cfi(view, &job);
         try check(status, null);
-        slot.* = .{ .id = self.next_id, .session_id = self.session_id, .kind = kind, .coverage = coverage, .epoch = self.epoch, .region = region, .path = path, .job = job.?, .touched_query = self.query, .image_identity = if (kind == .image) @bitCast(identity) else null, .image_container = image_container };
+        slot.* = .{ .id = self.next_id, .session_id = self.session_id, .kind = kind, .coverage = coverage, .epoch = self.epoch, .region = region, .path = path, .job = job.?, .touched_query = self.query, .image_identity = if (kind == .image) @as(*const runtime.c.struct_xrt_file_identity, @ptrCast(&identity)).* else null, .image_container = image_container };
         slot.*.?.region.path = path;
         self.next_id +|= 1;
         self.revision +%= 1;
@@ -494,7 +494,7 @@ pub const State = struct {
             c.xmd_poll(entry.job, &snapshot_);
             try check(c.xmd_cfi_result(entry.job, &bytes, &length), if (snapshot_.reason) |why| std.mem.span(why) else null);
             c.xmd_poll(entry.job, &snapshot_);
-            if (snapshot_.machine != @intFromEnum(session.target.arch()) or snapshot_.address_size != session.target.arch().addressBytes() or
+            if (snapshot_.machine != @backingInt(session.target.arch()) or snapshot_.address_size != session.target.arch().addressBytes() or
                 (snapshot_.little_endian != 0) != (session.target.arch().endian() == .little)) return error.DebugMetadataArchitectureMismatch;
             if (entry.cfi == null) entry.cfi = try info.Cfi.init(session.target.arch(), bytes[0..length]);
             // The decoder borrows the copied unwind bytes, not the file view.

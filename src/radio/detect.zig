@@ -627,7 +627,7 @@ const verbose = false;
 fn run(scene: Synth.Scene, tweak: anytype) !Verdict {
     const a = std.testing.allocator;
     var synth = Synth{ .scene = scene };
-    inline for (@typeInfo(@TypeOf(tweak)).@"struct".fields) |f| @field(synth, f.name) = @field(tweak, f.name);
+    inline for (@typeInfo(@TypeOf(tweak)).@"struct".field_names) |f_name| @field(synth, f_name) = @field(tweak, f_name);
     const samples = try synth.generate(a);
     defer a.free(samples);
     const v = try analyse(a, samples, .{});

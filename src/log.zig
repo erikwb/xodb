@@ -16,7 +16,7 @@ const std = @import("std");
 
 pub const Level = enum(u8) { required, @"error", warn, info, debug, trace };
 pub const Topic = enum(u8) { render, window, runtime, agent, session, mcp, sidecar, semq, overview, redot, profile };
-const topic_count = @typeInfo(Topic).@"enum".fields.len;
+const topic_count = @typeInfo(Topic).@"enum".field_names.len;
 const Table = [topic_count]Level;
 
 var levels: Table = @splat(.info);
@@ -29,7 +29,7 @@ extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int
 
 pub inline fn on(topic: Topic, level: Level) bool {
     if (level == .required) return true;
-    return @intFromEnum(level) <= @intFromEnum(levels[@intFromEnum(topic)]);
+    return @backingInt(level) <= @backingInt(levels[@backingInt(topic)]);
 }
 pub fn required(topic: Topic, comptime fmt: []const u8, args: anytype) void {
     emit(topic, .required, fmt, args);
@@ -112,7 +112,7 @@ fn emit(topic: Topic, level: Level, comptime fmt: []const u8, args: anytype) voi
     @branchHint(.cold);
     var buffer: [1024]u8 = undefined;
     var w: std.Io.Writer = .{ .vtable = &.{ .drain = drain }, .buffer = &buffer };
-    if (@intFromEnum(level) >= @intFromEnum(Level.debug)) {
+    if (@backingInt(level) >= @backingInt(Level.debug)) {
         const ms = (now() -| epoch) / std.time.ns_per_ms;
         w.print("xodb[{s}] +{d}.{d:0>3}s ", .{ @tagName(topic), ms / 1000, ms % 1000 }) catch {};
     }
@@ -133,7 +133,7 @@ pub fn parse(table: *Table, text: []const u8) error{InvalidLogValue}!void {
     while (items.next()) |item| {
         if (std.mem.indexOfScalar(u8, item, '=')) |eq| {
             const topic = std.meta.stringToEnum(Topic, item[0..eq]) orelse return error.InvalidLogValue;
-            table[@intFromEnum(topic)] = configuredLevel(item[eq + 1 ..]) orelse return error.InvalidLogValue;
+            table[@backingInt(topic)] = configuredLevel(item[eq + 1 ..]) orelse return error.InvalidLogValue;
         } else table.* = @splat(configuredLevel(item) orelse return error.InvalidLogValue);
     }
 }
@@ -147,14 +147,14 @@ fn describe(table: *const Table, out: []u8) usize {
         if (level != table[0]) break false;
     } else true;
     if (uniform) w.writeAll(@tagName(table[0])) catch unreachable else for (table, 0..) |level, i|
-        w.print("{s}{s}={s}", .{ if (i == 0) "" else ",", @tagName(@as(Topic, @enumFromInt(i))), @tagName(level) }) catch unreachable;
+        w.print("{s}{s}={s}", .{ if (i == 0) "" else ",", @tagName(@as(Topic, @fromBackingInt(@intCast(i)))), @tagName(level) }) catch unreachable;
     w.writeByte(0) catch unreachable;
     return w.end - 1;
 }
 fn refuse(option: []const u8, text: []const u8) noreturn {
     const names = comptime blk: {
         var joined: []const u8 = "";
-        for (@typeInfo(Topic).@"enum".fields) |field| joined = joined ++ (if (joined.len == 0) "" else ", ") ++ field.name;
+        for (@typeInfo(Topic).@"enum".field_names) |field_name| joined = joined ++ (if (joined.len == 0) "" else ", ") ++ field_name;
         break :blk joined;
     };
     std.debug.print("xodb: {s} {s}: expected error, warn, info, debug or trace, or topic=level[,topic=level...] with a topic from " ++ names ++ "\n", .{ option, text });
@@ -227,9 +227,9 @@ test "a level sets every topic and topic=level one of them" {
     try parse(&table, "debug");
     for (table) |level| try std.testing.expectEqual(Level.debug, level);
     try parse(&table, "warn,render=trace,sidecar=error");
-    try std.testing.expectEqual(Level.trace, table[@intFromEnum(Topic.render)]);
-    try std.testing.expectEqual(Level.@"error", table[@intFromEnum(Topic.sidecar)]);
-    try std.testing.expectEqual(Level.warn, table[@intFromEnum(Topic.mcp)]);
+    try std.testing.expectEqual(Level.trace, table[@backingInt(Topic.render)]);
+    try std.testing.expectEqual(Level.@"error", table[@backingInt(Topic.sidecar)]);
+    try std.testing.expectEqual(Level.warn, table[@backingInt(Topic.mcp)]);
     var text: [256]u8 = undefined;
     var again: Table = @splat(.info);
     try parse(&again, text[0..describe(&table, &text)]);
@@ -247,7 +247,7 @@ test "required output is distinct and never filtered" {
         levels = saved[0];
         fd = saved[1];
     }
-    try std.testing.expect(@intFromEnum(Level.required) != @intFromEnum(Level.@"error"));
+    try std.testing.expect(@backingInt(Level.required) != @backingInt(Level.@"error"));
     var ends: [2]c_int = undefined;
     try std.testing.expectEqual(@as(c_int, 0), std.c.pipe(&ends));
     defer _ = std.c.close(ends[0]);
@@ -303,7 +303,7 @@ test "debug lines carry the topic and time, and a repeating line is written once
     defer _ = std.c.close(ends[0]);
     fd = ends[1];
     levels = @splat(.info);
-    levels[@intFromEnum(Topic.render)] = .debug;
+    levels[@backingInt(Topic.render)] = .debug;
     for (0..3) |n| {
         once(.debug, .render, "first only {d}\n", .{n});
         try std.testing.expectEqual(n == 0, every(std.time.ns_per_hour, .info, .mcp, "xodb: hourly {d}\n", .{n}));

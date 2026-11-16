@@ -21,21 +21,7 @@ const records = @import("records.zig");
 const runtime = @import("runtime.zig");
 const rt = runtime.c;
 
-pub const c = @cImport({
-    @cUndef("_FORTIFY_SOURCE"); // glibc fortified fcntl wrappers cannot be translated in ReleaseSafe
-    @cDefine("_GNU_SOURCE", "1");
-    @cDefine("BIONIC_IOCTL_NO_SIGNEDNESS_OVERLOAD", "1"); // translate-c needs one ioctl declaration
-    @cInclude("errno.h");
-    @cInclude("fcntl.h");
-    @cInclude("stdio.h");
-    @cInclude("unistd.h");
-    @cInclude("string.h");
-    @cInclude("sys/ioctl.h");
-    @cInclude("sys/mman.h");
-    @cInclude("sys/syscall.h");
-    @cInclude("linux/perf_event.h");
-    @cInclude("time.h");
-});
+pub const c = @import("c_profile_linux_perf");
 
 pub const max_threads: u16 = 1024;
 pub const max_data_pages: u8 = 64;
@@ -322,7 +308,7 @@ pub const Collector = struct {
             ctx.used_stack += report.user_stack_bytes;
             ctx.skipped += report.skipped_unknown;
             ctx.reason = report.reason;
-            out[0] = .{ .bytes = report.consumed, .status = @intFromEnum(report.status) };
+            out[0] = .{ .bytes = report.consumed, .status = @backingInt(report.status) };
         }
     };
     pub fn drain(self: *Collector) Drain {
@@ -333,7 +319,7 @@ pub const Collector = struct {
             .sides = self.sides[0..ctx.used_sides],
             .user_states = self.user_states[0..ctx.used_states],
             .user_stack = self.user_stack[0..ctx.used_stack],
-            .status = @enumFromInt(status),
+            .status = @fromBackingInt(@intCast(status)),
             .skipped_unknown = ctx.skipped,
             .reason = if (status == rt.XRT_PERF_DRAIN_CANCELLED) "RemoteCancelled; unread records remain" else if (status == rt.XRT_PERF_DRAIN_OUTCOME_UNKNOWN) "RemoteOutcomeUnknown; consumed record acknowledgement unconfirmed" else if (status == rt.XRT_PERF_DRAIN_MALFORMED and ctx.reason.len == 0) "ring header is unusable" else ctx.reason,
         };
@@ -356,7 +342,7 @@ pub fn start(allocator: std.mem.Allocator, config: Config) error{OutOfMemory}!Op
     const cfg = rt.struct_xrt_cpu_config{
         .tids = config.tids.ptr,
         .thread_count = config.tids.len,
-        .event = @intFromEnum(event),
+        .event = @backingInt(event),
         .frequency_hz = config.frequency_hz,
         .user_stack_bytes = config.user_stack_bytes,
         .max_frames = config.max_frames,

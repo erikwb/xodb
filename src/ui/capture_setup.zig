@@ -665,7 +665,7 @@ test "outcomes use recorded evidence and keep the primary reason" {
     try testing.expectEqual(@as(?u64, null), remainingNs(facts, .{ .now_ns = 3_500_000_000 }));
     try testing.expectEqualStrings("#3 capturing  2.5 s, no time limit  /  412 of 16384 samples  /  2 threads (others not sampled)", summaryLine(&buffer, facts, .{}, .{ .now_ns = 3_500_000_000 }));
     // Every stop enum value has readable text.
-    inline for (@typeInfo(profile.Stop).@"enum".fields) |field| try testing.expect(reason(@enumFromInt(field.value)).title.len > 0);
+    inline for (@typeInfo(profile.Stop).@"enum".field_values) |field_value| try testing.expect(reason(@fromBackingInt(@intCast(field_value))).title.len > 0);
     const denied = startFailure(&buffer, "PerfOpenFailed", .{ .kind = .permission, .syscall = "perf_event_open", .errno = 13 }, 4, .{});
     try testing.expect(std.mem.indexOf(u8, denied.title, "permission") != null);
     const kernel = startFailure(&buffer, "KernelStacksDenied", .{ .kind = .permission, .syscall = "perf_event_open", .errno = 1 }, 1, .{});

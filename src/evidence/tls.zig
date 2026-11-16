@@ -711,7 +711,7 @@ test "key log parser replaces duplicates and rejects wrong TLS 1.3 secret length
 
 test "TLS 1.3 AES-GCM record decrypts only with its authenticated header" {
     const Aead = std.crypto.aead.aes_gcm.Aes128Gcm;
-    const key = Key{ .cipher = .aes_128_gcm_sha256, .bytes = [_]u8{0x5a} ** 32, .length = 16, .iv = [_]u8{0xa5} ** 12 };
+    const key = Key{ .cipher = .aes_128_gcm_sha256, .bytes = @as([32]u8, @splat(0x5a)), .length = 16, .iv = @as([12]u8, @splat(0xa5)) };
     const sequence: u64 = 7;
     const inner = [_]u8{ 1, 2, 3, 23 };
     var header = [5]u8{ 23, 3, 3, 0, inner.len + Aead.tag_length };

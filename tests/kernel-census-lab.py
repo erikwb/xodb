@@ -33,10 +33,19 @@ work.chmod(0o755)
 (work / 'out/x86_64-orc').symlink_to(kernel, target_is_directory=True)
 (work / 'initramfs').mkdir()
 probe = work / 'probe'
+bindings = {}
+for name, header in (('c_probe', 'tests/c_probe.h'),
+                     ('c_model_kernel_census', 'src/bindings/model_kernel_census.h')):
+    dest = work / (name + '.zig')
+    dest.write_bytes(subprocess.check_output(['zig', 'translate-c', '-lc', '-target',
+                                             'x86_64-linux-musl', header], timeout=120))
+    bindings[name] = dest
 subprocess.run(['zig', 'build-exe', '-OReleaseSafe', '-lc', '-target', 'x86_64-linux-musl',
-                '--dep', 'census', '-Mroot=tests/kernel-census-probe.zig',
-                '-Mcensus=src/model/kernel_census.zig', '-femit-bin=' + str(probe)],
-               check=True, timeout=120)
+                '--dep', 'census', '--dep', 'c_probe', '-Mroot=tests/kernel-census-probe.zig',
+                '--dep', 'c_model_kernel_census', '-Mcensus=src/model/kernel_census.zig',
+                *['-M' + name + '=' + str(path) for name, path in bindings.items()],
+                '-femit-bin=' + str(probe)], check=True, timeout=120)
+
 manifest = work / 'initramfs.list'
 manifest.write_text('dir /dev 0755 0 0\nnod /dev/console 0600 0 0 c 5 1\n'
                     'dir /proc 0555 0 0\nfile /init ' + str(probe) + ' 0755 0 0\n'

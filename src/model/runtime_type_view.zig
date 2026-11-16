@@ -69,7 +69,7 @@ const State = struct {
             const address = std.fmt.parseInt(u64, self.filter[0..self.filter_len], 0) catch return false;
             return g.types[index].address == address;
         }
-        return self.filter_len == 0 or std.ascii.indexOfIgnoreCase(text(g, g.types[index].name), self.filter[0..self.filter_len]) != null;
+        return self.filter_len == 0 or std.ascii.findIgnoreCase(text(g, g.types[index].name), self.filter[0..self.filter_len]) != null;
     }
     fn selectValid(self: *State, g: *const c.struct_xjai_graph) void {
         if (self.selected_type < g.type_count and self.matches(g, self.selected_type)) return;

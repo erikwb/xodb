@@ -403,8 +403,8 @@ test "CFI expression returns its stack top and keeps the evaluator bounds" {
     try std.testing.expectEqual(@FieldType(Place, "kind").value, value.kind);
     try std.testing.expectError(error.MalformedExpression, evaluate(ctx, &.{ .{ .atom = OP.lit1 }, .{ .atom = OP.drop } }));
     try std.testing.expectError(error.MemoryUnreadable, evaluate(ctx, &.{ .{ .atom = OP.call_frame_cfa }, .{ .atom = OP.breg6 }, .{ .atom = OP.deref } }));
-    const deep = [_]Op{.{ .atom = OP.lit0 }} ** 129;
+    const deep = @as([129]Op, @splat(.{ .atom = OP.lit0 }));
     try std.testing.expectError(error.ExpressionTooDeep, evaluate(ctx, &deep));
-    const long = [_]Op{.{ .atom = OP.nop }} ** 4097;
+    const long = @as([4097]Op, @splat(.{ .atom = OP.nop }));
     try std.testing.expectError(error.ExpressionTooLarge, evaluate(ctx, &long));
 }

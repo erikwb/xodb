@@ -113,10 +113,10 @@ const flag_ignorable: u32 = 1;
 /// ArchiveUnsupportedValue rather than a different meaning.
 fn Codes(comptime E: type, comptime names: []const []const u8) type {
     comptime {
-        for (@typeInfo(E).@"enum".fields) |field| {
+        for (@typeInfo(E).@"enum".field_names) |field_name| {
             for (names) |name| {
-                if (std.mem.eql(u8, name, field.name)) break;
-            } else @compileError("archive code table lacks " ++ @typeName(E) ++ "." ++ field.name);
+                if (std.mem.eql(u8, name, field_name)) break;
+            } else @compileError("archive code table lacks " ++ @typeName(E) ++ "." ++ field_name);
         }
     }
     return struct {
@@ -320,7 +320,7 @@ fn encodeInner(a: Allocator, capture: *const Capture, env: Environment) ![]u8 {
     var offset: usize = header_bytes + entry_bytes * selected.len;
     for (selected, bodies[0..selected.len], 0..) |tag, body, i| {
         const entry = out[header_bytes + i * entry_bytes ..][0..entry_bytes];
-        std.mem.writeInt(u32, entry[0..4], @intFromEnum(tag), .little);
+        std.mem.writeInt(u32, entry[0..4], @backingInt(tag), .little);
         std.mem.writeInt(u32, entry[4..8], if (tag == .producer or tag == .evidence_context or tag == .usb_evidence_context or tag == .kernel_stacks or tag == .memory_image) flag_ignorable else 0, .little);
         std.mem.writeInt(u64, entry[8..16], offset, .little);
         std.mem.writeInt(u32, entry[16..20], @intCast(body.items.len), .little);
@@ -519,7 +519,7 @@ fn encodeImages(w: Writer, capture: *const Capture) !void {
     try w.count(capture.images.loaded.items.len + capture.pe_assets.entries.items.len);
     for (capture.images.loaded.items) |image| {
         if (!image.immutable) return error.ArchiveMutableImage;
-        if (@intFromEnum(image.image.header.machine) != machine_x86_64) return error.ArchiveUnsupportedArchitecture;
+        if (@backingInt(image.image.header.machine) != machine_x86_64) return error.ArchiveUnsupportedArchitecture;
         const identity = identify(image.imageAllowingProjection(.archive_identity));
         try w.int(u64, image.id);
         if (typed) try w.code(ImageKindCode.encode(.elf));
@@ -753,8 +753,8 @@ pub const Resolver = struct {
     enabled: bool = false,
     fn candidate(self: Resolver, buffer: []u8, report: ImageReport) ?[:0]const u8 {
         if (!self.enabled) return null;
-        if (self.root) |root| return std.fmt.bufPrintZ(buffer, "{s}/{s}", .{ root, std.fmt.bytesToHex(report.identity.sha256, .lower) }) catch null;
-        return std.fmt.bufPrintZ(buffer, "{s}", .{report.path}) catch null;
+        if (self.root) |root| return std.fmt.bufPrintSentinel(buffer, "{s}/{s}", .{ root, std.fmt.bytesToHex(report.identity.sha256, .lower) }, 0) catch null;
+        return std.fmt.bufPrintSentinel(buffer, "{s}", .{report.path}, 0) catch null;
     }
 };
 pub const Options = struct {
@@ -873,35 +873,35 @@ fn readHeader(bytes: []const u8, limit: usize) Error!Header {
         const body = bytes[next..][0..length];
         next += length;
         if (std.mem.readInt(u32, entry[20..24], .little) != std.hash.Crc32.hash(body)) return error.ArchiveChecksum;
-        if (required < section_order.len and tag == @intFromEnum(section_order[required])) {
+        if (required < section_order.len and tag == @backingInt(section_order[required])) {
             if (flags != 0) return error.ArchiveSectionLayout;
             result.sections[required] = body;
             required += 1;
-        } else if (tag == @intFromEnum(Tag.syscalls)) {
+        } else if (tag == @backingInt(Tag.syscalls)) {
             if (flags != 0 or required != section_order.len or result.syscalls != null or required_features & 32 == 0 or minor < 5) return error.ArchiveSectionLayout;
             result.syscalls = body;
-        } else if (tag == @intFromEnum(Tag.user_state)) {
+        } else if (tag == @backingInt(Tag.user_state)) {
             if (flags != 0 or required != section_order.len or result.user_state != null or required_features & 4 == 0 or minor < 2) return error.ArchiveSectionLayout;
             result.user_state = body;
-        } else if (tag == @intFromEnum(Tag.limits)) {
+        } else if (tag == @backingInt(Tag.limits)) {
             if (flags != 0 or required != section_order.len or result.limits != null or required_features & 16 == 0 or minor < 4) return error.ArchiveSectionLayout;
             result.limits = body;
-        } else if (tag == @intFromEnum(Tag.thread_scope)) {
+        } else if (tag == @backingInt(Tag.thread_scope)) {
             if (flags != 0 or required != section_order.len or result.thread_scope != null or required_features & 8 == 0 or minor < 3) return error.ArchiveSectionLayout;
             result.thread_scope = body;
-        } else if (tag == @intFromEnum(Tag.producer)) {
+        } else if (tag == @backingInt(Tag.producer)) {
             if (flags != flag_ignorable or required != section_order.len or result.producer != null or minor < 6) return error.ArchiveSectionLayout;
             result.producer = body;
-        } else if (tag == @intFromEnum(Tag.evidence_context)) {
+        } else if (tag == @backingInt(Tag.evidence_context)) {
             if (flags != flag_ignorable or required != section_order.len or result.evidence_context != null) return error.ArchiveSectionLayout;
             result.evidence_context = body;
-        } else if (tag == @intFromEnum(Tag.usb_evidence_context)) {
+        } else if (tag == @backingInt(Tag.usb_evidence_context)) {
             if (flags != flag_ignorable or required != section_order.len or result.usb_evidence_context != null or result.evidence_context == null or minor < usb_evidence_context_minor) return error.ArchiveSectionLayout;
             result.usb_evidence_context = body;
-        } else if (tag == @intFromEnum(Tag.kernel_stacks)) {
+        } else if (tag == @backingInt(Tag.kernel_stacks)) {
             if (flags != flag_ignorable or required != section_order.len or result.kernel_stacks != null or minor < kernel_stacks_minor) return error.ArchiveSectionLayout;
             result.kernel_stacks = body;
-        } else if (tag == @intFromEnum(Tag.memory_image)) {
+        } else if (tag == @backingInt(Tag.memory_image)) {
             // No minor floor: frame attachment may stamp an older minor and
             // leave this ignorable section in place. Writers still record 12.
             if (flags != flag_ignorable or required != section_order.len or result.memory_image != null) return error.ArchiveSectionLayout;
@@ -910,7 +910,7 @@ fn readHeader(bytes: []const u8, limit: usize) Error!Header {
             if (flags != flag_ignorable or required != section_order.len or result.frames != null) return error.ArchiveSectionLayout;
             result.frames = body;
         } else if (flags == flag_ignorable) {
-            for (section_order) |known| if (tag == @intFromEnum(known)) return error.ArchiveSectionLayout;
+            for (section_order) |known| if (tag == @backingInt(known)) return error.ArchiveSectionLayout;
             result.ignored += 1;
         } else return error.ArchiveSectionLayout;
     }
@@ -1107,7 +1107,7 @@ fn decodeMeta(r: *Reader, self: *Capture, source: *Source, a: Allocator) !void {
     self.debugger_marker_dropped = try r.int(u64);
     self.debugger_events_lost = try r.int(u64);
     self.debugger_sequence = try r.int(u64);
-    const reasons = try r.count(@typeInfo(capture_model.Stop).@"enum".fields.len, 1);
+    const reasons = try r.count(@typeInfo(capture_model.Stop).@"enum".field_names.len, 1);
     for (0..reasons) |i| {
         const reason = try StopCode.decode(try r.code());
         if (std.mem.indexOfScalar(capture_model.Stop, self.stop_reasons[0..i], reason) != null) return error.ArchiveInconsistent;
@@ -1384,11 +1384,11 @@ fn loadEmbedded(self: *Capture, report: *ImageReport, raw: []const u8) !void {
         report.status = .invalid_elf;
         return;
     };
-    if (@intFromEnum(image.header.machine) != machine_x86_64) {
+    if (@backingInt(image.header.machine) != machine_x86_64) {
         report.status = .invalid_elf;
         return;
     }
-    const name = try self.images.allocator.dupeZ(u8, report.path);
+    const name = try self.images.allocator.dupeSentinel(u8, report.path, 0);
     errdefer self.images.allocator.free(name);
     const module = try self.images.allocator.create(modules.Module);
     errdefer self.images.allocator.destroy(module);
@@ -1421,7 +1421,7 @@ fn loadImage(self: *Capture, report: *ImageReport, resolver: Resolver, embeds: [
         return;
     }
     var proc: [64]u8 = undefined;
-    const reopen = std.fmt.bufPrintZ(&proc, "/proc/self/fd/{d}", .{pinned}) catch unreachable;
+    const reopen = std.fmt.bufPrintSentinel(&proc, "/proc/self/fd/{d}", .{pinned}, 0) catch unreachable;
     const fd = c.open(reopen.ptr, c.O_RDONLY | c.O_CLOEXEC | c.O_NONBLOCK);
     if (fd < 0) {
         report.status = .unreadable;
@@ -1469,11 +1469,11 @@ fn loadImage(self: *Capture, report: *ImageReport, resolver: Resolver, embeds: [
     };
     // The current archive header and sampled-register ABI are still x86-64.
     // A matching content hash does not make a foreign ISA compatible with it.
-    if (@intFromEnum(image.header.machine) != machine_x86_64) {
+    if (@backingInt(image.header.machine) != machine_x86_64) {
         report.status = .invalid_elf;
         return;
     }
-    const name = try self.images.allocator.dupeZ(u8, report.path);
+    const name = try self.images.allocator.dupeSentinel(u8, report.path, 0);
     errdefer self.images.allocator.free(name);
     const module = try self.images.allocator.create(modules.Module);
     errdefer self.images.allocator.destroy(module);
@@ -1509,7 +1509,7 @@ fn publishInner(path: [:0]const u8, bytes: []const u8, state: ?*progress.Progres
     if (path.len == 0 or path.len > max_path or std.mem.indexOfScalar(u8, path, 0) != null or bytes.len > max_file_bytes) return error.ArchivePathInvalid;
     try progress.step(state, .publishing, 0);
     var buffer: [max_path + 80]u8 = undefined;
-    const temporary = try std.fmt.bufPrintZ(&buffer, "{s}.xcap-{d}-{d}.tmp", .{ path, c.getpid(), @import("../target/linux.zig").now() });
+    const temporary = try std.fmt.bufPrintSentinel(&buffer, "{s}.xcap-{d}-{d}.tmp", .{ path, c.getpid(), @import("../target/linux.zig").now() }, 0);
     const fd = c.open(temporary.ptr, c.O_WRONLY | c.O_CREAT | c.O_EXCL | c.O_CLOEXEC | c.O_NOFOLLOW, @as(c_uint, 0o600));
     if (fd < 0) return error.ArchiveOpenFailed;
     defer {
@@ -1645,7 +1645,7 @@ fn encodeAnnotations(w: Writer, original: *const Capture, state: ?*progress.Prog
             .inode = source.inode,
             .device_major = source.device_major,
             .device_minor = source.device_minor,
-            .path = try w.a.dupeZ(u8, source.path),
+            .path = try w.a.dupeSentinel(u8, source.path, 0),
             .image = source.image,
             .bias = source.bias,
             .start = source.start,
@@ -1772,7 +1772,7 @@ fn validateUserState(self: *const Capture) !void {
         return;
     }
     self.config.validate() catch return error.ArchiveInvalidValue;
-    const perf_regs = records.perfFile(@intFromEnum(self.architecture)) orelse return error.ArchiveUnsupportedArchitecture;
+    const perf_regs = records.perfFile(@backingInt(self.architecture)) orelse return error.ArchiveUnsupportedArchitecture;
     if (self.accepted.user_stack_bytes != self.config.user_stack_bytes or self.accepted.user_regs_mask != perf_regs.mask or self.accepted.sample_type & bits != bits or store.count > store.entries.len or store.used > store.bytes.len or store.used > self.config.user_stack_budget_bytes) return error.ArchiveInconsistent;
     var count: usize = 0;
     var used: usize = 0;
@@ -2002,15 +2002,13 @@ fn decodeSyscalls(r: *Reader, self: *Capture) !void {
 }
 
 test "archive resolver refuses FIFO without an open side effect" {
-    const notify = @cImport({
-        @cInclude("sys/inotify.h");
-    });
+    const notify = @import("c_profile_archive");
     var directory = "archive-resolver-XXXXXX".*;
     const dir = c.mkdtemp(&directory) orelse return error.TestUnexpectedResult;
     defer _ = c.rmdir(dir);
     try std.testing.expectEqual(@as(c_int, 0), c.chmod(dir, 0o755));
     var path_buffer: [128]u8 = undefined;
-    const path = try std.fmt.bufPrintZ(&path_buffer, "{s}/fifo", .{std.mem.span(dir)});
+    const path = try std.fmt.bufPrintSentinel(&path_buffer, "{s}/fifo", .{std.mem.span(dir)}, 0);
     try std.testing.expectEqual(@as(c_int, 0), c.mkfifo(path, 0o600));
     defer _ = c.unlink(path);
     const monitor = notify.inotify_init1(notify.IN_NONBLOCK | notify.IN_CLOEXEC);

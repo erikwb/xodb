@@ -4,7 +4,7 @@
 const std = @import("std");
 
 pub const Phase = enum { connect, window, instance, device, swapchain, draw };
-const count = @typeInfo(Phase).@"enum".fields.len;
+const count = @typeInfo(Phase).@"enum".field_names.len;
 
 var began: [count]u64 = @splat(0);
 var open: [count]bool = @splat(false);
@@ -19,14 +19,14 @@ fn now() u64 {
 }
 
 pub fn begin(phase: Phase) void {
-    const i = @intFromEnum(phase);
+    const i = @backingInt(phase);
     if (done[i] or open[i]) return;
     began[i] = now();
     open[i] = true;
 }
 
 pub fn end(phase: Phase) void {
-    const i = @intFromEnum(phase);
+    const i = @backingInt(phase);
     if (done[i] or !open[i]) return;
     ended[i] = now();
     micros[i] = (ended[i] -| began[i]) / std.time.ns_per_us;
@@ -35,11 +35,11 @@ pub fn end(phase: Phase) void {
 }
 
 pub fn finished(phase: Phase) bool {
-    return done[@intFromEnum(phase)];
+    return done[@backingInt(phase)];
 }
 
 pub fn microseconds(phase: Phase) u64 {
-    return micros[@intFromEnum(phase)];
+    return micros[@backingInt(phase)];
 }
 
 /// XODB_STARTUP_TRACE=FILE appends absolute CLOCK_MONOTONIC nanoseconds for
@@ -58,15 +58,15 @@ fn traceAppend(line: []const u8) void {
 }
 pub fn tracePresent(main_ns: u64) void {
     if (!tracing()) return;
-    const w = @intFromEnum(Phase.window);
-    const d = @intFromEnum(Phase.draw);
+    const w = @backingInt(Phase.window);
+    const d = @backingInt(Phase.draw);
     var buffer: [768]u8 = undefined;
     var used = (std.fmt.bufPrint(&buffer, "present main={d} configured={d} present={d} connect={d} window={d} instance={d} device={d} swapchain={d} draw={d}", .{
         main_ns, ended[w], ended[d], micros[0], micros[1], micros[2], micros[3], micros[4], micros[5],
     }) catch return).len;
     // Absolute phase starts: the gaps between phases are the unnamed work.
-    inline for (@typeInfo(Phase).@"enum".fields, 0..) |field, i| {
-        used += (std.fmt.bufPrint(buffer[used..], " {s}_at={d}", .{ field.name, began[i] }) catch return).len;
+    inline for (@typeInfo(Phase).@"enum".field_names, 0..) |field_name, i| {
+        used += (std.fmt.bufPrint(buffer[used..], " {s}_at={d}", .{ field_name, began[i] }) catch return).len;
     }
     buffer[used] = '\n';
     traceAppend(buffer[0 .. used + 1]);

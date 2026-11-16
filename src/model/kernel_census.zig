@@ -2,16 +2,7 @@
 //! changes. A worker builds an immutable publication; only its owner swaps it.
 const std = @import("std");
 const builtin = @import("builtin");
-const c = @cImport({
-    @cUndef("_FORTIFY_SOURCE");
-    @cInclude("dirent.h");
-    @cInclude("fcntl.h");
-    @cInclude("unistd.h");
-    @cInclude("errno.h");
-    @cInclude("time.h");
-    @cInclude("stdlib.h");
-    @cInclude("sys/stat.h");
-});
+const c = @import("c_model_kernel_census");
 const a = std.heap.c_allocator;
 pub const max_tasks = 32768;
 pub const max_text = 8 * 1024 * 1024;
@@ -111,7 +102,7 @@ pub const Snapshot = struct {
                 if (x.count != y.count) return x.count > y.count;
                 const order = std.mem.order(u8, x.stack, y.stack);
                 if (order != .eq) return order == .lt;
-                return @intFromEnum(x.status) < @intFromEnum(y.status);
+                return @backingInt(x.status) < @backingInt(y.status);
             }
         }.less);
         const rank = try self.arena.allocator().alloc(usize, self.groups.items.len);
@@ -174,7 +165,7 @@ pub const Dir = struct {
     }
     fn openDir(self: Dir, path: []const u8) !Dir {
         var buf: [128]u8 = undefined;
-        const z = try std.fmt.bufPrintZ(&buf, "{s}", .{path});
+        const z = try std.fmt.bufPrintSentinel(&buf, "{s}", .{path}, 0);
         const fd = c.openat(self.fd, z, c.O_RDONLY | c.O_DIRECTORY | c.O_CLOEXEC);
         if (fd < 0) return ioError();
         return .{ .fd = fd };
@@ -317,7 +308,7 @@ fn sampleTask(s: *Snapshot, dir: Dir, pid: i32, tid: i32) !void {
 
 pub fn identityMatches(task: Task) bool {
     var path: [96]u8 = undefined;
-    const name = std.fmt.bufPrintZ(&path, "/proc/{d}/task/{d}", .{ task.pid, task.tid }) catch return false;
+    const name = std.fmt.bufPrintSentinel(&path, "/proc/{d}/task/{d}", .{ task.pid, task.tid }, 0) catch return false;
     var dir = Dir.open(name) catch return false;
     defer dir.close();
     var buf: [4096]u8 = undefined;
@@ -523,7 +514,7 @@ test "kernel census synthetic procfs, unavailable is not empty, bounded collecti
     _ = c.unlinkat(root.fd, "stack", 0);
     try sampleTask(&s, root, 42, 44);
     try std.testing.expectEqual(Status.unsupported, s.groups.items[2].status);
-    const long = [_]u8{'a'} ** 8192;
+    const long = @as([8192]u8, @splat('a'));
     try fixtureFile(root, "stack", &long);
     try sampleTask(&s, root, 42, 45);
     try std.testing.expect(s.truncated);

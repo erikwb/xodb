@@ -214,7 +214,7 @@ pub const Capture = struct {
             self.preview_status = "Source path cannot be opened";
             return;
         }
-        const name = std.heap.page_allocator.dupeZ(u8, path) catch {
+        const name = std.heap.page_allocator.dupeSentinel(u8, path, 0) catch {
             self.preview_status = "Source preview memory limit";
             return;
         };

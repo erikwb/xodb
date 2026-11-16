@@ -9,7 +9,7 @@ ExclusiveArch:  x86_64
 # Use --with external_zig when a standalone Zig compiler is already on PATH.
 %bcond_with external_zig
 %if %{without external_zig}
-BuildRequires:  zig >= 0.16.0
+BuildRequires:  zig >= 0.17.0
 %endif
 BuildRequires:  gcc
 BuildRequires:  pkgconfig(capstone)

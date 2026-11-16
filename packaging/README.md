@@ -1,6 +1,6 @@
 # Local Linux packages
 
-These recipes build the current **Linux x86-64 GUI** with Zig **0.16 or newer** and
+These recipes build the current **Linux x86-64 GUI** with Zig **0.17 or newer** and
 ReleaseSafe, targeting the baseline CPU rather than the builder's CPU. GNU build
 IDs let package tools associate binaries with their debug symbols. These are
 initial local packaging, not a claim of acceptance into any distribution.
@@ -66,7 +66,7 @@ dpkg-buildpackage -us -uc -b
 sudo apt install ../xodb_0.0.0-1_amd64.deb
 ```
 
-The normal dependency check expects a Zig 0.16 or newer **package**. If you supplied
+The normal dependency check expects a Zig 0.17 or newer **package**. If you supplied
 the official standalone compiler on PATH instead, use the explicit build profile:
 
 ```sh

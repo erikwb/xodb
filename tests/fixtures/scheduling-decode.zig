@@ -86,7 +86,7 @@ test "per-task switch direction, preemption, and absent other task" {
     const out_misc: u16 = records.Misc.switch_out | records.Misc.switch_out_preempt | records.Misc.user;
     const leaving = switchRec(out_misc, 20, 21, 1000);
     const entering = switchRec(records.Misc.switch_out_preempt | records.Misc.user, 20, 21, 2000);
-    var ring: [128]u8 = [_]u8{0} ** 128;
+    var ring: [128]u8 = @splat(0);
     place(&ring, 0, leaving.b[0..leaving.n]);
     place(&ring, leaving.n, entering.b[0..entering.n]);
     var samples: [2]records.Sample = undefined;
@@ -113,7 +113,7 @@ test "switch without sample id keeps identity and time absent" {
     var w = W{};
     w.begin(records.Type.context_switch, records.Misc.switch_out);
     const rec = w.finish();
-    var ring: [32]u8 = [_]u8{0} ** 32;
+    var ring: [32]u8 = @splat(0);
     place(&ring, 0, rec);
     var samples: [1]records.Sample = undefined;
     var sides: [1]records.Side = undefined;
@@ -130,7 +130,7 @@ test "time-only sample id does not invent a task" {
     w.begin(records.Type.context_switch, records.Misc.user);
     w.putU64(77);
     const rec = w.finish();
-    var ring: [32]u8 = [_]u8{0} ** 32;
+    var ring: [32]u8 = @splat(0);
     place(&ring, 0, rec);
     var samples: [1]records.Sample = undefined;
     var sides: [1]records.Side = undefined;
@@ -143,7 +143,7 @@ test "time-only sample id does not invent a task" {
 
 test "cpu-wide switch keeps the other task distinct, including idle zero" {
     const rec = switchWide(records.Misc.switch_out, 0, 0, 9, 9, 50);
-    var ring: [64]u8 = [_]u8{0} ** 64;
+    var ring: [64]u8 = @splat(0);
     place(&ring, 0, rec.b[0..rec.n]);
     var samples: [1]records.Sample = undefined;
     var sides: [1]records.Side = undefined;
@@ -167,7 +167,7 @@ test "sample id cpu and id stay aligned" {
     w.putU32(7);
     w.putU32(0);
     const rec = w.finish();
-    var ring: [64]u8 = [_]u8{0} ** 64;
+    var ring: [64]u8 = @splat(0);
     place(&ring, 0, rec);
     var samples: [1]records.Sample = undefined;
     var sides: [1]records.Side = undefined;
@@ -189,7 +189,7 @@ test "identifier after cpu does not shift the cpu field" {
     w.putU32(0);
     w.putU64(0xabcdef);
     const rec = w.finish();
-    var ring: [64]u8 = [_]u8{0} ** 64;
+    var ring: [64]u8 = @splat(0);
     place(&ring, 0, rec);
     var samples: [1]records.Sample = undefined;
     var sides: [1]records.Side = undefined;
@@ -204,7 +204,7 @@ test "short and padded switch bodies are rejected and not consumed" {
     short.begin(records.Type.context_switch, 0);
     short.putU64(1);
     const short_rec = short.finish();
-    var ring: [64]u8 = [_]u8{0} ** 64;
+    var ring: [64]u8 = @splat(0);
     place(&ring, 0, short_rec);
     var samples: [1]records.Sample = undefined;
     var sides: [2]records.Side = undefined;
@@ -219,7 +219,7 @@ test "short and padded switch bodies are rejected and not consumed" {
     idTail(&padded, 3, 4, 5);
     padded.putU64(9);
     const padded_rec = padded.finish();
-    var ring2: [64]u8 = [_]u8{0} ** 64;
+    var ring2: [64]u8 = @splat(0);
     place(&ring2, 0, padded_rec);
     const bad2 = go(&ring2, 0, padded_rec.len, input(tid_time, true), &samples, &sides);
     try std.testing.expectEqual(records.Status.malformed, bad2.status);
@@ -228,7 +228,7 @@ test "short and padded switch bodies are rejected and not consumed" {
 
 test "wrapped switch matches a linear switch" {
     const rec = switchRec(records.Misc.switch_out, 8, 8, 42);
-    var ring: [32]u8 = [_]u8{0} ** 32;
+    var ring: [32]u8 = @splat(0);
     const at: u64 = 28;
     place(&ring, at, rec.b[0..rec.n]);
     var samples: [1]records.Sample = undefined;
@@ -289,7 +289,7 @@ test "mixed sample, mmap2, loss, and switch stream keeps order" {
         @memcpy(built[n..][0..part.len], part);
         n += part.len;
     }
-    var ring: [512]u8 = [_]u8{0} ** 512;
+    var ring: [512]u8 = @splat(0);
     place(&ring, 0, built[0..n]);
     var samples: [2]records.Sample = undefined;
     var sides: [8]records.Side = undefined;
@@ -314,7 +314,7 @@ test "mixed sample, mmap2, loss, and switch stream keeps order" {
 test "side capacity leaves the rest of the ring queued" {
     const first = switchRec(records.Misc.user, 1, 1, 1);
     const second = switchRec(records.Misc.switch_out, 1, 1, 2);
-    var ring: [128]u8 = [_]u8{0} ** 128;
+    var ring: [128]u8 = @splat(0);
     place(&ring, 0, first.b[0..first.n]);
     place(&ring, first.n, second.b[0..second.n]);
     var samples: [1]records.Sample = undefined;

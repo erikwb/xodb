@@ -55,7 +55,7 @@ pub const View = struct {
             const width = if (tokens) @as(f32, 3) else @max(1, bounds.w * @as(f32, @floatCast((@min(end, s.end) - @max(start, s.start)) / (end - start))));
             const height = if (tokens) @as(f32, @floatCast(4 + 21 * @log(1 + @as(f64, @floatFromInt(s.weight))) / @log(1 + @as(f64, @floatFromInt(max_weight))))) else @as(f32, 25);
             const rect = gpu.Rect{ .x = x, .y = y + 25 - height, .w = width, .h = height };
-            const selected = index == self.selected or (query.len > 0 and std.ascii.indexOfIgnoreCase(s.label, query) != null);
+            const selected = index == self.selected or (query.len > 0 and std.ascii.findIgnoreCase(s.label, query) != null);
             const hash = std.hash.Wyhash.hash(3, s.label);
             const share: f32 = if (s.cache_input > 0) @floatCast(@max(0, @min(1, s.cache_read / s.cache_input))) else 0;
             const color: gpu.Color = if (selected) .{ 0.9, 0.65, 0.25, 1 } else if (tokens and self.cache_overlay) .{ 0.2, 0.2 + 0.7 * share, 0.25, 1 } else .{ 0.1 + @as(f32, @floatFromInt(hash % 16)) / 100, 0.12 + @as(f32, @floatFromInt((hash >> 8) % 16)) / 100, 0.22, 1 };

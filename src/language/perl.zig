@@ -397,7 +397,7 @@ pub fn readLocals(session: *const Context, a: A, observed: Stack, tid: i32, segm
 }
 /// Pure syntax preparation; the owner calls this before cached-stack access.
 pub fn checkExpression(a: A, expression: []const u8) !void {
-    if (c.xpl_expression_check(try a.dupeZ(u8, expression)) != null) return error.UnsupportedPerlExpression;
+    if (c.xpl_expression_check(try a.dupeSentinel(u8, expression, 0)) != null) return error.UnsupportedPerlExpression;
 }
 pub fn evaluateLocal(session: *const Context, a: A, observed: Stack, tid: i32, segment_index: usize, frame: usize, expression: []const u8) !@import("locals_types.zig").Result {
     try session.languages.require(.perl);
@@ -421,7 +421,7 @@ fn readBindings(session: *const Context, a: A, observed: Stack, tid: i32, segmen
     if (!std.mem.eql(u8, id, try buildId(a, layout))) return error.PerlBuildIdMismatch;
     var r = reader(session);
     const raw = try a.create(c.struct_xpl_locals);
-    if (expression) |query| c.xpl_local_find(layout, &r, interpreter, frame, try a.dupeZ(u8, query), raw) else c.xpl_locals_read(layout, &r, interpreter, frame, start, limit, raw);
+    if (expression) |query| c.xpl_local_find(layout, &r, interpreter, frame, try a.dupeSentinel(u8, query, 0), raw) else c.xpl_locals_read(layout, &r, interpreter, frame, start, limit, raw);
     if ((raw.cv != 0 and raw.cv != cv) or (raw.context_address != 0 and raw.context_address != context)) return error.StaleLanguageFrame;
     const rows = try a.alloc(named.Row, raw.count);
     for (raw.items[0..raw.count], rows) |item, *out| {
@@ -496,25 +496,25 @@ fn watchValue(session: *const Context, a: A, module: Module, capture: *WatchCapt
     } else c.xpl_local_find(layout, &r, capture.scope.runtime[1], frame, capture.expression, raw);
     if (raw.cv != 0 and (raw.cv != capture.scope.frame[1] or raw.context_address != expected_context)) return error.StaleLanguageFrame;
     if (raw.reason != null or raw.count != 1) {
-        capture.diagnostic = try a.dupeZ(u8, if (raw.reason != null) std.mem.span(raw.reason) else "PerlWatchBindingUnavailable");
+        capture.diagnostic = try a.dupeSentinel(u8, if (raw.reason != null) std.mem.span(raw.reason) else "PerlWatchBindingUnavailable", 0);
         return;
     }
     const item = &raw.items[0];
     if (row != null) {
-        capture.expression = try a.dupeZ(u8, std.mem.sliceTo(&item.name, 0));
+        capture.expression = try a.dupeSentinel(u8, std.mem.sliceTo(&item.name, 0), 0);
         if (capture.expression.len == 0 or capture.expression.len > c.XLW_EXPRESSION) return error.PerlWatchNameTooLong;
         if (!std.unicode.utf8ValidateSlice(capture.expression)) return error.PerlWatchNameInvalid;
         capture.scope.frame[2] = 1;
         capture.scope.frame[3] = item.ordinal;
     }
     if (item.reason != null) {
-        capture.diagnostic = try a.dupeZ(u8, std.mem.span(item.reason));
+        capture.diagnostic = try a.dupeSentinel(u8, std.mem.span(item.reason), 0);
         return;
     }
     const sample = try a.create(c.struct_xpl_sample);
     c.xpl_sample_read(layout, &r, item.sv, sample);
     if (sample.reason != null) {
-        capture.diagnostic = try a.dupeZ(u8, std.mem.span(sample.reason));
+        capture.diagnostic = try a.dupeSentinel(u8, std.mem.span(sample.reason), 0);
         return;
     }
     capture.observation = c.XLW_COMPLETE;
@@ -523,9 +523,9 @@ fn watchValue(session: *const Context, a: A, module: Module, capture: *WatchCapt
 pub fn watchExpression(a: A, expression: ?[]const u8, row: ?usize) ![:0]const u8 {
     if ((expression == null) == (row == null)) return error.InvalidArguments;
     if (expression) |query| if (query.len == 0 or query.len > c.XLW_EXPRESSION or std.mem.indexOfScalar(u8, query, 0) != null) return error.InvalidArguments;
-    if (expression) |query| if (c.xpl_watch_expression_check(try a.dupeZ(u8, query)) != null) return error.UnsupportedPerlExpression;
+    if (expression) |query| if (c.xpl_watch_expression_check(try a.dupeSentinel(u8, query, 0)) != null) return error.UnsupportedPerlExpression;
     if (row) |index| if (index >= c.XPL_MAX_PAD_NAMES) return error.InvalidArguments;
-    return try a.dupeZ(u8, expression orelse "binding");
+    return try a.dupeSentinel(u8, expression orelse "binding", 0);
 }
 pub fn createWatch(session: *const Context, a: A, observed: Stack, tid: i32, segment_index: usize, frame: usize, checked_expression: [:0]const u8, row: ?usize) !WatchCapture {
     try session.languages.require(.perl);
@@ -560,7 +560,7 @@ pub fn observeWatch(session: *const Context, a: A, observed_result: anyerror!Sta
         capture.runtime_identity = dormant.identity;
         // Keep the last sample as history. Without a canonical thread frame,
         // do not dereference its remembered address or declare it retired.
-        capture.diagnostic = try a.dupeZ(u8, if (dormant.module.id == scope.runtime[0]) "RuntimeNotSeenExecuting" else "PerlWatchRuntimeChanged");
+        capture.diagnostic = try a.dupeSentinel(u8, if (dormant.module.id == scope.runtime[0]) "RuntimeNotSeenExecuting" else "PerlWatchRuntimeChanged", 0);
         if (dormant.module.id != scope.runtime[0]) capture.scope.runtime[0] = dormant.module.id;
         return capture;
     };
@@ -568,7 +568,7 @@ pub fn observeWatch(session: *const Context, a: A, observed_result: anyerror!Sta
     capture.runtime_identity = .witnessed;
     if (module_id != scope.runtime[0]) {
         capture.scope.runtime[0] = module_id;
-        capture.diagnostic = try a.dupeZ(u8, "PerlWatchRuntimeChanged");
+        capture.diagnostic = try a.dupeSentinel(u8, "PerlWatchRuntimeChanged", 0);
         return capture;
     }
     var saw_runtime = false;
@@ -581,7 +581,7 @@ pub fn observeWatch(session: *const Context, a: A, observed_result: anyerror!Sta
         for (segment_.frames, 0..) |frame, index| {
             if (frame.stackinfo != scope.runtime[2] or (if (frame.stackinfo == 0) @as(u64, 0) else frame.context_index + 1) != scope.frame[0]) continue;
             if (!frame.identity_proved) {
-                capture.diagnostic = try a.dupeZ(u8, frame.reason orelse "PerlWatchFrameUnproved");
+                capture.diagnostic = try a.dupeSentinel(u8, frame.reason orelse "PerlWatchFrameUnproved", 0);
                 return capture;
             }
             if (try std.fmt.parseInt(u64, frame.cv, 0) != scope.frame[1]) continue;
@@ -592,8 +592,8 @@ pub fn observeWatch(session: *const Context, a: A, observed_result: anyerror!Sta
     }
     if (saw_runtime and complete) {
         capture.observation = c.XLW_FRAME_GONE;
-        capture.diagnostic = try a.dupeZ(u8, "PerlWatchFrameGone");
-    } else capture.diagnostic = try a.dupeZ(u8, "PerlWatchFrameNotObserved");
+        capture.diagnostic = try a.dupeSentinel(u8, "PerlWatchFrameGone", 0);
+    } else capture.diagnostic = try a.dupeSentinel(u8, "PerlWatchFrameNotObserved", 0);
     try session.expectGeneration(observed.generation);
     return capture;
 }

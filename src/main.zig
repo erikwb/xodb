@@ -455,7 +455,7 @@ noinline fn xodbMain(init: std.process.Init, startup_started: u64) !void {
     const ghidra_prestart = preferences.decompiler.prestart and !no_ghidra_prestart;
     // Off in either place is off.
     var languages = preferences.languages;
-    inline for (@typeInfo(@TypeOf(languages)).@"struct".fields) |field| @field(languages, field.name) = @field(languages, field.name) and @field(languages_off, field.name);
+    inline for (@typeInfo(@TypeOf(languages)).@"struct".field_names) |field_name| @field(languages, field_name) = @field(languages, field_name) and @field(languages_off, field_name);
     // The command line wins over the config file; both were range-checked.
     try snapshot.configure(image_limit orelse preferences.symbols.image_bytes, image_total_limit orelse preferences.symbols.image_total_bytes);
     if (static_decompile) |path| return @import("semq/static_image.zig").decompile(a, path, static_function);
@@ -478,12 +478,12 @@ noinline fn xodbMain(init: std.process.Init, startup_started: u64) !void {
             var remote_args: std.ArrayList([:0]const u8) = .empty;
             if (connect != null and !std.meta.eql(languages, .{})) log.warn(.session, "xodb: the server owns the target; language views are turned off where it was started, not here\n", .{});
             const endpoint: @import("remote/client.zig").Endpoint = if (connect) |address| .{ .tcp = address } else blk: {
-                try remote_args.appendSlice(a, &.{ remote_xodb, "--headless", "--mcp", "--agent-scope", if (scope_explicit) try a.dupeZ(u8, @tagName(agent_scope)) else "control" });
+                try remote_args.appendSlice(a, &.{ remote_xodb, "--headless", "--mcp", "--agent-scope", if (scope_explicit) try a.dupeSentinel(u8, @tagName(agent_scope), 0) else "control" });
                 if (log.value()) |setting| try remote_args.appendSlice(a, &.{ "--log", setting });
                 // The server reads the target, so the switches go with it.
                 if (!languages.enabled) try remote_args.appendSlice(a, &.{ "--language-off", "all" });
-                inline for (@typeInfo(@TypeOf(languages).Name).@"enum".fields) |field| {
-                    if (!@field(languages, field.name)) try remote_args.appendSlice(a, &.{ "--language-off", field.name });
+                inline for (@typeInfo(@TypeOf(languages).Name).@"enum".field_names) |field_name| {
+                    if (!@field(languages, field_name)) try remote_args.appendSlice(a, &.{ "--language-off", field_name });
                 }
                 if (source) |path| try remote_args.appendSlice(a, &.{ "--source", path });
                 if (!ghidra_prestart) try remote_args.append(a, "--no-ghidra-prestart");
@@ -493,7 +493,7 @@ noinline fn xodbMain(init: std.process.Init, startup_started: u64) !void {
                 for (debug_files.items) |path| try remote_args.appendSlice(a, &.{ "--debug-file", path });
                 if (image_limit) |n| try remote_args.appendSlice(a, &.{ "--image-limit", try std.fmt.allocPrintSentinel(a, "{d}", .{n}, 0) });
                 if (image_total_limit) |n| try remote_args.appendSlice(a, &.{ "--image-total-limit", try std.fmt.allocPrintSentinel(a, "{d}", .{n}, 0) });
-                for (initial_breakpoints[0..initial_breakpoint_count]) |name| try remote_args.appendSlice(a, &.{ "--break", try a.dupeZ(u8, name) });
+                for (initial_breakpoints[0..initial_breakpoint_count]) |name| try remote_args.appendSlice(a, &.{ "--break", try a.dupeSentinel(u8, name, 0) });
                 if (attach) |pid| {
                     try remote_args.appendSlice(a, &.{ "--attach", try std.fmt.allocPrintSentinel(a, "{d}", .{pid}, 0) });
                 } else {
@@ -996,7 +996,7 @@ fn remoteGui(owner: *@import("model/remote_worker.zig").Worker, window: *Window,
     // owner from a frame, including an early renderer/window error.
     defer finishRemoteOwner(owner, window);
     const rt = @import("target/runtime.zig").c;
-    rt.xrt_remote_io_guard_strict(comptime @import("builtin").mode == .Debug);
+    rt.xrt_remote_io_guard_strict(comptime @import("builtin").mode == .debug);
     rt.xrt_remote_io_guard(true);
     defer {
         rt.xrt_remote_io_guard(false);
@@ -1481,7 +1481,7 @@ test {
     std.testing.refAllDecls(@import("mcp/server.zig"));
     std.testing.refAllDecls(@import("preferences.zig"));
     std.testing.refAllDecls(@import("model/compatibility.zig"));
-    std.testing.refAllDecls(@import("ui/thread_list.zig"));
+    if (build_options.gui) std.testing.refAllDecls(@import("ui/thread_list.zig"));
     std.testing.refAllDecls(@import("profile/archive.zig"));
     std.testing.refAllDecls(@import("profile/linux_syscalls.zig"));
     std.testing.refAllDecls(@import("observe/context.zig"));

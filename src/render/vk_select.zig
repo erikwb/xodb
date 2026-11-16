@@ -25,10 +25,10 @@ pub const Node = struct {
 /// broadcom_icd*, virtio_icd*, powervr_mesa_icd*; NVIDIA's is nvidia_icd*.
 pub fn loaderPattern(driver: []const u8) ?[:0]const u8 {
     const table = [_]struct { []const u8, [:0]const u8 }{
-        .{ "amdgpu", "*radeon*" },     .{ "i915", "*intel*" },        .{ "xe", "*intel*" },
-        .{ "nouveau", "*nouveau*" },   .{ "nvidia", "*nvidia*" },     .{ "asahi", "*asahi*" },
-        .{ "msm", "*freedreno*" },     .{ "panfrost", "*panfrost*" }, .{ "panthor", "*panfrost*" },
-        .{ "v3d", "*broadcom*" },      .{ "virtio_gpu", "*virtio*" }, .{ "virtio-gpu", "*virtio*" },
+        .{ "amdgpu", "*radeon*" },   .{ "i915", "*intel*" },        .{ "xe", "*intel*" },
+        .{ "nouveau", "*nouveau*" }, .{ "nvidia", "*nvidia*" },     .{ "asahi", "*asahi*" },
+        .{ "msm", "*freedreno*" },   .{ "panfrost", "*panfrost*" }, .{ "panthor", "*panfrost*" },
+        .{ "v3d", "*broadcom*" },    .{ "virtio_gpu", "*virtio*" }, .{ "virtio-gpu", "*virtio*" },
         .{ "powervr", "*powervr*" },
     };
     for (table) |entry| if (std.mem.eql(u8, driver, entry[0])) return entry[1];
@@ -70,7 +70,7 @@ pub fn choose(devices: []const Device, request: ?[]const u8, display: ?Node) Err
         if (std.fmt.parseInt(usize, wanted, 10)) |index| {
             if (index < devices.len) found = index;
         } else |_| for (devices, 0..) |device, i| {
-            if (std.ascii.indexOfIgnoreCase(device.name, wanted) == null) continue;
+            if (std.ascii.findIgnoreCase(device.name, wanted) == null) continue;
             if (found == null or (device.usable and !devices[found.?].usable)) found = i;
         }
         const index = found orelse return error.VulkanDeviceNotFound;

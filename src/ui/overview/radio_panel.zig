@@ -296,13 +296,13 @@ pub const State = struct {
     }
     /// [ and ] cycle the strip's metric; Esc returns to the sweep; f toggles a fixed window.
     pub fn key(self: *State, sym: u32, shortcut: u32, now: u64) bool {
-        const n = @typeInfo(Metric).@"enum".fields.len;
+        const n = @typeInfo(Metric).@"enum".field_names.len;
         if (shortcut == ']') {
-            self.metric = @enumFromInt((@intFromEnum(self.metric) + 1) % n);
+            self.metric = @fromBackingInt(@intCast((@backingInt(self.metric) + 1) % n));
             return true;
         }
         if (shortcut == '[') {
-            self.metric = @enumFromInt((@intFromEnum(self.metric) + n - 1) % n);
+            self.metric = @fromBackingInt(@intCast((@backingInt(self.metric) + n - 1) % n));
             return true;
         }
         if (shortcut == 'f') {

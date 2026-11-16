@@ -163,7 +163,7 @@ pub fn snapshot(allocator: std.mem.Allocator, source: *const Capture) !*Capture 
     try copy.images.loaded.ensureTotalCapacity(allocator, source.images.loaded.items.len);
     for (source.images.loaded.items) |image| {
         if (!image.immutable) return error.ProfileViewMutableImage;
-        const path = try allocator.dupeZ(u8, image.path);
+        const path = try allocator.dupeSentinel(u8, image.path, 0);
         errdefer allocator.free(path);
         const private = try allocator.create(modules.Module);
         // Deliberately read only immutable fields; archive/source workers may

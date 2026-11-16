@@ -84,7 +84,7 @@ test "retry delay survives repeated frames and has a saturating deadline" {
 // into another remote inspection on every frame.
 pub fn hashValue(hash: *std.hash.Wyhash, value: anytype) void {
     switch (@typeInfo(@TypeOf(value))) {
-        .float => std.hash.autoHash(hash, @as(std.meta.Int(.unsigned, @bitSizeOf(@TypeOf(value))), @bitCast(value))),
+        .float => std.hash.autoHash(hash, @as(@Int(.unsigned, @bitSizeOf(@TypeOf(value))), @bitCast(value))),
         .pointer => {
             std.hash.autoHash(hash, value.len);
             for (value) |item| hashValue(hash, item);
@@ -93,7 +93,7 @@ pub fn hashValue(hash: *std.hash.Wyhash, value: anytype) void {
             std.hash.autoHash(hash, value != null);
             if (value) |item| hashValue(hash, item);
         },
-        .@"struct" => |structure| inline for (structure.fields) |field| hashValue(hash, @field(value, field.name)),
+        .@"struct" => |structure| inline for (structure.field_names) |field_name| hashValue(hash, @field(value, field_name)),
         .@"union" => {
             std.hash.autoHash(hash, std.meta.activeTag(value));
             switch (value) {

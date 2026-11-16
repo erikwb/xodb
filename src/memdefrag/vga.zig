@@ -86,8 +86,8 @@ test "VGA palette is the canonical sixteen and ANSI order swaps red and blue" {
     try std.testing.expect(ansi(yellow).bright and ansi(yellow).n == 3);
     // Every state and change draws something distinct from unknown.
     const unknown = glyph(.{ .state = .unknown }, false);
-    inline for (@typeInfo(model.State).@"enum".fields) |f| {
-        const s: model.State = @enumFromInt(f.value);
+    inline for (@typeInfo(model.State).@"enum".field_values) |f_value| {
+        const s: model.State = @fromBackingInt(@intCast(f_value));
         if (s != .unknown) try std.testing.expect(!std.meta.eql(glyph(.{ .state = s }, false), unknown));
     }
     const changed = glyph(.{ .state = .thp, .change = .changed }, true);

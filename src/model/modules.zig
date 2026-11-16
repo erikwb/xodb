@@ -491,7 +491,7 @@ pub const Modules = struct {
         self.core_source = core;
         self.immutable = true;
         if (executable) |name| {
-            const z = try self.allocator.dupeZ(u8, name);
+            const z = try self.allocator.dupeSentinel(u8, name, 0);
             defer self.allocator.free(z);
             const real = c.realpath(z, null) orelse return error.CoreExecutableUnavailable;
             defer c.free(real);
@@ -504,7 +504,7 @@ pub const Modules = struct {
             defer snapshot.free(data);
             const image = try elf.Image.parse(data);
             const id = image.buildId() orelse return error.CoreExecutableBuildIdMissing;
-            const path = try self.allocator.dupeZ(u8, std.mem.span(real));
+            const path = try self.allocator.dupeSentinel(u8, std.mem.span(real), 0);
             errdefer self.allocator.free(path);
             self.core_executable = .{ .path = path, .id = try self.allocator.dupe(u8, id) };
         }
@@ -672,7 +672,7 @@ pub const Modules = struct {
     }
     pub fn fromGdbExecutable(self: *Modules, name: []const u8, machine: u16, target: anytype) !void {
         if (self.loaded.items.len != 0) return;
-        const name_z = try self.allocator.dupeZ(u8, name);
+        const name_z = try self.allocator.dupeSentinel(u8, name, 0);
         defer self.allocator.free(name_z);
         const real = c.realpath(name_z.ptr, null) orelse return error.GdbExecutableUnavailable;
         defer c.free(real);
@@ -691,7 +691,7 @@ pub const Modules = struct {
         // arm64 and loongarch64 link vmlinux as ET_DYN at a fixed kernel address.
         const kernel_pie = self.measure_kernel_slide and image.header.type == .shared;
         if (image.header.type != .executable and !kernel_pie) return error.GdbExecutablePositionIndependentUnsupported;
-        if (@intFromEnum(image.header.machine) != machine) return error.UnsupportedArchitecture;
+        if (@backingInt(image.header.machine) != machine) return error.UnsupportedArchitecture;
         var link_lo: u64 = std.math.maxInt(u64);
         var link_hi: u64 = 0;
         for (0..image.header.segment_count) |i| {
@@ -760,7 +760,7 @@ pub const Modules = struct {
             if (address) |note| if (id.len > loaded.len or try target.readMemory(note, loaded[0..id.len]) != id.len or
                 !std.mem.eql(u8, loaded[0..id.len], id)) return error.GdbExecutableMismatch;
         }
-        const path = try self.allocator.dupeZ(u8, std.mem.span(real));
+        const path = try self.allocator.dupeSentinel(u8, std.mem.span(real), 0);
         errdefer self.allocator.free(path);
         const inode: u64 = @intCast(stat.st_ino);
         var start: u64 = std.math.maxInt(u64);
@@ -1439,7 +1439,7 @@ pub const Modules = struct {
         const shown = std.fmt.bufPrint(&label, "kernel/{s}.ko", .{name}) catch return error.InvalidAddress;
         const module = try self.allocator.create(Module);
         errdefer self.allocator.destroy(module);
-        const owned_path = try self.allocator.dupeZ(u8, shown);
+        const owned_path = try self.allocator.dupeSentinel(u8, shown, 0);
         errdefer self.allocator.free(owned_path);
         module.* = .{
             .id = self.next_id,
@@ -1523,7 +1523,7 @@ pub const Modules = struct {
     fn walkObjects(self: *Modules, root: []const u8, file: []const u8, depth: u8, budget: *u32) ?[:0]u8 {
         if (depth == 6 or budget.* == 0) return null;
         var buf: [4096]u8 = undefined;
-        const opened = std.fmt.bufPrintZ(&buf, "{s}", .{root}) catch return null;
+        const opened = std.fmt.bufPrintSentinel(&buf, "{s}", .{root}, 0) catch return null;
         const dir = c.opendir(opened.ptr) orelse return null;
         defer _ = c.closedir(dir);
         while (c.readdir(dir)) |entry| {
@@ -1531,8 +1531,8 @@ pub const Modules = struct {
             budget.* -= 1;
             const name = std.mem.sliceTo(@as([*:0]const u8, @ptrCast(&entry.*.d_name)), 0);
             if (name.len == 0 or name[0] == '.') continue;
-            const child = std.fmt.bufPrintZ(&buf, "{s}/{s}", .{ root, name }) catch continue;
-            if (std.mem.eql(u8, name, file) and entry.*.d_type != 4) return self.allocator.dupeZ(u8, child) catch null;
+            const child = std.fmt.bufPrintSentinel(&buf, "{s}/{s}", .{ root, name }, 0) catch continue;
+            if (std.mem.eql(u8, name, file) and entry.*.d_type != 4) return self.allocator.dupeSentinel(u8, child, 0) catch null;
             if (entry.*.d_type == 4 or entry.*.d_type == 0) {
                 if (self.walkObjects(child, file, depth + 1, budget)) |found| return found;
             }
@@ -2226,7 +2226,7 @@ pub const Modules = struct {
             self.remote_boot = snapshot.bootIdTarget(self.target);
             self.remote_boot_checked = true;
         }
-        return identity.size > 0 and snapshot.holdsRemote(@bitCast(identity), self.remote_boot, @intCast(identity.size), completeness);
+        return identity.size > 0 and snapshot.holdsRemote(@as(*const c.struct_xrt_file_identity, @ptrCast(&identity)).*, self.remote_boot, @intCast(identity.size), completeness);
     }
     /// Forget what earlier sweeps skipped; call before a search of every image.
     pub fn beginSweep(self: *Modules) void {
@@ -2680,9 +2680,9 @@ pub const Modules = struct {
         const mapped = try snapshot.copyAnonymous(scratch);
         errdefer snapshot.free(mapped);
         const image = try elf.Image.parse(mapped);
-        if (@intFromEnum(image.header.machine) != (self.expected_machine orelse rt.xrt_target_arch(self.target).*.machine)) return error.UnsupportedTargetArchitecture;
+        if (@backingInt(image.header.machine) != (self.expected_machine orelse rt.xrt_target_arch(self.target).*.machine)) return error.UnsupportedTargetArchitecture;
         const p = try self.placement(&image, 0, region, observed);
-        const path = try self.allocator.dupeZ(u8, region.path);
+        const path = try self.allocator.dupeSentinel(u8, region.path, 0);
         errdefer self.allocator.free(path);
         const module = try self.allocator.create(Module);
         errdefer self.allocator.destroy(module);
@@ -2733,7 +2733,7 @@ pub const Modules = struct {
         const ready_fd = if (prepared) |p| p.fd else generic;
         const expected = if (self.core_source != null) try self.coreId(region.path) else null;
         const selected_path = if (self.core_executable) |exe| (if (expected != null and std.mem.eql(u8, expected.?, exe.id)) exe.path else region.path) else region.path;
-        const path = try self.allocator.dupeZ(u8, selected_path);
+        const path = try self.allocator.dupeSentinel(u8, selected_path, 0);
         errdefer self.allocator.free(path);
         // Only read the inode actually mapped by the target. map_files can need
         // privileges unavailable to run-as, so exe/path retain inode checks.
@@ -2823,7 +2823,7 @@ pub const Modules = struct {
         const claimed = held_image;
         held_image = null;
         const mapped = if (claimed) |bytes| bytes else ((if (remote)
-            snapshot.readRemoteRange(fd, entry.offset, entry.size, snapshot.per_image_limit, if (why == .sweep) @intCast(bound.?.each) else null, @bitCast(original.?), self.remote_boot, coverage)
+            snapshot.readRemoteRange(fd, entry.offset, entry.size, snapshot.per_image_limit, if (why == .sweep) @intCast(bound.?.each) else null, @as(*const c.struct_xrt_file_identity, @ptrCast(&original.?)).*, self.remote_boot, coverage)
         else if (why == .sweep)
             snapshot.readSweepRange(fd, entry.offset, entry.size, snapshot.per_image_limit, @intCast(bound.?.each))
         else
@@ -2852,7 +2852,7 @@ pub const Modules = struct {
         }
         const image = try elf.Image.parse(mapped);
         if (expected) |id| if (!std.mem.eql(u8, id, image.buildId() orelse return error.CoreModuleBuildIdMissing)) return error.CoreModuleBuildIdMismatch;
-        if (@intFromEnum(image.header.machine) != (self.expected_machine orelse rt.xrt_target_arch(self.target).*.machine)) return error.UnsupportedArchitecture;
+        if (@backingInt(image.header.machine) != (self.expected_machine orelse rt.xrt_target_arch(self.target).*.machine)) return error.UnsupportedArchitecture;
         const p = try self.placement(&image, entry.offset, region, observed);
         var module = try self.allocator.create(Module);
         errdefer self.allocator.destroy(module);
@@ -3175,7 +3175,7 @@ pub const Modules = struct {
         };
         if (self.symbol_refusals.get(fileKey(region))) |refused| return refused;
         const file_index = try self.fileIdentity(region);
-        const path = try self.allocator.dupeZ(u8, region.path);
+        const path = try self.allocator.dupeSentinel(u8, region.path, 0);
         defer self.allocator.free(path);
         const request = std.mem.zeroInit(rt.struct_xrt_file_request, .{
             .kind = rt.XRT_FILE_MAPPED,
@@ -3216,7 +3216,12 @@ pub const Modules = struct {
         defer _ = c.close(fd);
         // The reader finished; whatever refuses its view from here on (too
         // large, not a usable ELF, no memory for it) is final for this map too.
-        errdefer |err| self.symbol_refusals.put(self.allocator, fileKey(region), err) catch {};
+        return self.loadSymbolImage(region, fd, resident, source, identity, projected, file_index) catch |err| {
+            self.symbol_refusals.put(self.allocator, fileKey(region), err) catch {};
+            return err;
+        };
+    }
+    fn loadSymbolImage(self: *Modules, region: Region, fd: c_int, resident: u64, source: mapped_file.Source, identity: ?rt.struct_xrt_file_identity, projected: rt.struct_xrt_file_identity, file_index: usize) !*const elf.Image {
         var stat: c.struct_stat = undefined;
         if (c.fstat(fd, &stat) != 0 or stat.st_size <= 0 or stat.st_blocks < 0) return error.BinaryUnavailable;
         // Sparse files may allocate a whole page for each tiny distant table.
@@ -3229,7 +3234,7 @@ pub const Modules = struct {
         const bytes: []align(std.heap.page_size_min) u8 = @as([*]align(std.heap.page_size_min) u8, @ptrCast(@alignCast(ptr)))[0..size];
         errdefer _ = c.munmap(bytes.ptr, bytes.len);
         const image = try elf.Image.parse(bytes);
-        if (@intFromEnum(image.header.machine) != rt.xrt_target_arch(self.target).*.machine) return error.UnsupportedArchitecture;
+        if (@backingInt(image.header.machine) != rt.xrt_target_arch(self.target).*.machine) return error.UnsupportedArchitecture;
         try self.trimSymbols(retained);
         // A remote projection carries the agent's stat of the file it read,
         // so a later file view is compared with the version symbols came from.
@@ -3513,7 +3518,7 @@ pub const Modules = struct {
     /// A stat of the mapped file, not a copy. True when a synchronous
     /// transfer would refuse it. Discovery yield and cancellation propagate.
     fn remoteExceedsSync(self: *Modules, region: Region) !bool {
-        const path = try self.allocator.dupeZ(u8, region.path);
+        const path = try self.allocator.dupeSentinel(u8, region.path, 0);
         defer self.allocator.free(path);
         const request = std.mem.zeroInit(rt.struct_xrt_file_request, .{
             .kind = rt.XRT_FILE_MAPPED,
@@ -3532,7 +3537,7 @@ pub const Modules = struct {
     /// filesystems, and a path alone can be mounted over.
     fn isExecutable(pid: i32, r: Region) bool {
         var link: [32]u8 = undefined;
-        const exe = std.fmt.bufPrintZ(&link, "/proc/{d}/exe", .{pid}) catch return false;
+        const exe = std.fmt.bufPrintSentinel(&link, "/proc/{d}/exe", .{pid}, 0) catch return false;
         var path: [4097]u8 = undefined;
         const n = c.readlink(exe.ptr, &path, path.len);
         if (n <= 0 or n >= path.len or !std.mem.eql(u8, path[0..@intCast(n)], r.path)) return false;
@@ -3800,10 +3805,13 @@ pub const Modules = struct {
     fn nativePeHeaders(self: *Modules, region: Region) !bool {
         const cached = self.file_kinds.getPtr(fileKey(region)).?;
         if (cached.pe_headers_valid) |valid| return valid;
-        errdefer |err| if (err != error.OutOfMemory) {
-            cached.failure = err;
+        return self.probeNativePeHeaders(region, cached) catch |err| {
+            if (err != error.OutOfMemory) cached.failure = err;
+            return err;
         };
-        const path = try self.allocator.dupeZ(u8, region.path);
+    }
+    fn probeNativePeHeaders(self: *Modules, region: Region, cached: *FileClassification) !bool {
+        const path = try self.allocator.dupeSentinel(u8, region.path, 0);
         defer self.allocator.free(path);
         const request = std.mem.zeroInit(rt.struct_xrt_file_request, .{
             .kind = rt.XRT_FILE_MAPPED,
@@ -3868,16 +3876,21 @@ pub const Modules = struct {
         };
         // A failed revalidation also belongs to this observation; repeating it
         // for every alias must not turn a stale cached file into an I/O flood.
-        errdefer |err| if (err != error.OutOfMemory) {
-            if (self.file_kinds.getPtr(key)) |cached| {
-                cached.checked_revision = self.maps_revision;
-                cached.failure = err;
-            } else {
-                if (self.file_kinds.count() >= max_file_kinds) self.file_kinds.clearRetainingCapacity();
-                self.file_kinds.put(self.allocator, key, .{ .kind = .other, .identity = null, .checked_revision = self.maps_revision, .failure = err }) catch {};
+        return self.classifyFile(region, key) catch |err| {
+            if (err != error.OutOfMemory) {
+                if (self.file_kinds.getPtr(key)) |cached| {
+                    cached.checked_revision = self.maps_revision;
+                    cached.failure = err;
+                } else {
+                    if (self.file_kinds.count() >= max_file_kinds) self.file_kinds.clearRetainingCapacity();
+                    self.file_kinds.put(self.allocator, key, .{ .kind = .other, .identity = null, .checked_revision = self.maps_revision, .failure = err }) catch {};
+                }
             }
+            return err;
         };
-        const path = try self.allocator.dupeZ(u8, region.path);
+    }
+    fn classifyFile(self: *Modules, region: Region, key: FileKey) !FileKind {
+        const path = try self.allocator.dupeSentinel(u8, region.path, 0);
         defer self.allocator.free(path);
         const request = std.mem.zeroInit(rt.struct_xrt_file_request, .{
             .kind = rt.XRT_FILE_MAPPED,
@@ -3927,7 +3940,7 @@ pub const Modules = struct {
         } else return error.NotMachO;
         if (region.inode == 0 or region.imageKind() != .file) return error.NotMachO;
         if (try self.fileKind(region) != .macho) return error.NotMachO;
-        const path = try self.allocator.dupeZ(u8, region.path);
+        const path = try self.allocator.dupeSentinel(u8, region.path, 0);
         defer self.allocator.free(path);
         const request = std.mem.zeroInit(rt.struct_xrt_file_request, .{
             .kind = rt.XRT_FILE_MAPPED,
@@ -3945,9 +3958,9 @@ pub const Modules = struct {
         // mapped thousands of times must not be reopened for each mapping.
         const identity = self.file_kinds.get(fileKey(region)).?.identity orelse return error.BinaryIdentityUnavailable;
         self.pe_images.poll();
-        _ = try self.pe_images.observeIdentity(fileKey(region), @bitCast(identity));
+        _ = try self.pe_images.observeIdentity(fileKey(region), @as(*const c.struct_xrt_file_identity, @ptrCast(&identity)).*);
         if (self.pe_images.failed(identity)) |err| return err;
-        const entry = self.pe_images.get(self.allocator, self.owner_target, region, @bitCast(identity)) catch |err| {
+        const entry = self.pe_images.get(self.allocator, self.owner_target, region, @as(*const c.struct_xrt_file_identity, @ptrCast(&identity)).*) catch |err| {
             // Cache even a change before the very first PE parse. Otherwise
             // aliases would reopen a file whose stop identity already failed.
             if (err == error.BinaryChangedDuringRead) self.file_kinds.getPtr(fileKey(region)).?.failure = err;
@@ -4024,7 +4037,7 @@ pub const Modules = struct {
             if (!std.ascii.eqlIgnoreCase(std.fs.path.basename(entry.path), name[0..bang])) return null;
             requested = name[bang + 1 ..];
         }
-        const z = try self.allocator.dupeZ(u8, requested);
+        const z = try self.allocator.dupeSentinel(u8, requested, 0);
         defer self.allocator.free(z);
         const image = entry.image() orelse return error.SymbolDiscoveryPending;
         if (entry.pdb()) |pdb| if (c.xpdb_find_public(pdb, z)) |symbol| {
@@ -4159,7 +4172,7 @@ test "APK placement keeps two entries and repeated load instances separate" {
     var regions: [6]Region = undefined;
     for (&regions, 0..) |*r, i| r.* = .{ .start = 0x100000 + (i / 2) * 0x10000 + (i % 2) * 4096, .end = 0x101000 + (i / 2) * 0x10000 + (i % 2) * 4096, .offset = (if (i < 4) @as(u64, 0x4000) else 0x10000) + (i % 2) * 4096, .inode = 7, .device_major = 1, .device_minor = 1, .permissions = if (i % 2 == 0) "r--p".* else "r-xp".*, .path = "/test.apk" };
     var modules = Modules.init(std.testing.allocator);
-    modules.regions = .{ .items = &regions, .capacity = regions.len };
+    modules.regions = .fromOwnedSlice(&regions);
     defer modules.region_starts.deinit(std.testing.allocator);
     defer modules.file_maps.deinit(std.testing.allocator);
     defer modules.dropPlacements();
@@ -4317,7 +4330,7 @@ test "module relabel preserves exact provenance at process-scale mapping counts"
         const r = modules.regions.items[i];
         if (i < 100) {
             const module = try a.create(Module);
-            module.* = .{ .id = i + 1, .inode = r.inode, .device_major = r.device_major, .device_minor = r.device_minor, .path = try a.dupeZ(u8, r.path), .image = fixture_image, .mapping = .{ .full = &.{} }, .owns_mapping = false, .bias = 0, .start = r.start, .end = r.end, .file_source = .target_root };
+            module.* = .{ .id = i + 1, .inode = r.inode, .device_major = r.device_major, .device_minor = r.device_minor, .path = try a.dupeSentinel(u8, r.path, 0), .image = fixture_image, .mapping = .{ .full = &.{} }, .owns_mapping = false, .bias = 0, .start = r.start, .end = r.end, .file_source = .target_root };
             try modules.loaded.append(a, module);
         } else {
             const ptr = c.mmap(null, 4096, c.PROT_READ | c.PROT_WRITE, c.MAP_PRIVATE | c.MAP_ANONYMOUS, -1, 0);
@@ -4452,7 +4465,7 @@ test "placing many mappings of one file is linear, and the work bound is reporte
     for (regions[0..count], 0..) |*r, i| r.* = .{ .start = 0x100000 + i * 0x10000, .end = 0x101000 + i * 0x10000, .offset = 0, .inode = 7, .device_major = 1, .device_minor = 2, .permissions = "r--p".*, .path = "/many" };
     regions[count] = .{ .start = regions[count - 1].start + 4096, .end = regions[count - 1].start + 8192, .offset = 4096, .inode = 7, .device_major = 1, .device_minor = 2, .permissions = "r-xp".*, .path = "/many" };
     var modules = Modules.init(std.testing.allocator);
-    modules.regions = .{ .items = regions, .capacity = regions.len };
+    modules.regions = .fromOwnedSlice(regions);
     defer {
         modules.clearFailures();
         modules.load_failures.deinit(std.testing.allocator);
@@ -4543,14 +4556,7 @@ test "metadata NotElf memo covers aliases for one maps revision" {
 }
 
 test "cached file kinds revalidate PE and other answers once per map revision" {
-    const native = @cImport({
-        @cDefine("_GNU_SOURCE", "1");
-        @cInclude("target_internal.h");
-        @cInclude("stdlib.h");
-        @cInclude("sys/mman.h");
-        @cInclude("sys/sysmacros.h");
-        @cInclude("sys/stat.h");
-    });
+    const native = @import("c_model_modules");
     const a = std.testing.allocator;
     const fd = native.memfd_create("mapped-kind", native.MFD_CLOEXEC);
     try std.testing.expect(fd >= 0);
@@ -4597,14 +4603,7 @@ test "cached file kinds revalidate PE and other answers once per map revision" {
 }
 
 test "automatic PE runtime data lookup has independent breakpoint intent" {
-    const native = @cImport({
-        @cDefine("_GNU_SOURCE", "1");
-        @cInclude("target_internal.h");
-        @cInclude("stdlib.h");
-        @cInclude("sys/mman.h");
-        @cInclude("sys/sysmacros.h");
-        @cInclude("sys/stat.h");
-    });
+    const native = @import("c_model_modules");
     const a = std.testing.allocator;
     const fd = native.memfd_create("runtime-pe", native.MFD_CLOEXEC);
     try std.testing.expect(fd >= 0);

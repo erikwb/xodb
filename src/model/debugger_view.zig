@@ -87,14 +87,14 @@ pub const Presentation = struct {
 pub fn requireImmutable(comptime T: type) void {
     switch (@typeInfo(T)) {
         .pointer => |p| {
-            if (p.size != .slice or !p.is_const or p.sentinel() != null)
+            if (p.size != .slice or !p.attrs.@"const" or p.sentinel() != null)
                 @compileError("debugger presentations require const ordinary slices, not object pointers");
             requireImmutable(p.child);
         },
         .optional => |o| requireImmutable(o.child),
         .array => |v| requireImmutable(v.child),
-        .@"struct" => |s| inline for (s.fields) |field| requireImmutable(field.type),
-        .@"union" => |u| inline for (u.fields) |field| requireImmutable(field.type),
+        .@"struct" => |s| inline for (s.field_types) |field_type| requireImmutable(field_type),
+        .@"union" => |u| inline for (u.field_types) |field_type| requireImmutable(field_type),
         else => {},
     }
 }
@@ -124,7 +124,7 @@ pub const SourceFile = struct {
     pub fn load(self: *SourceFile, path: []const u8) !void {
         if (!self.value.remote and std.mem.eql(u8, path, self.value.path) and self.value.bytes.len > 0) return;
         const a = std.heap.page_allocator;
-        const name = try a.dupeZ(u8, path);
+        const name = try a.dupeSentinel(u8, path, 0);
         errdefer a.free(name);
         const fd = c.open(name, c.O_RDONLY | c.O_CLOEXEC | c.O_NONBLOCK);
         if (fd < 0) return error.SourceFileUnavailable;
@@ -153,7 +153,7 @@ pub const SourceFile = struct {
                 return remote_err;
             };
             errdefer a.free(bytes);
-            const name = try a.dupeZ(u8, site.path);
+            const name = try a.dupeSentinel(u8, site.path, 0);
             self.replace(bytes, bytes.len, name, false, true);
         };
     }

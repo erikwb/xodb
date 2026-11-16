@@ -11,9 +11,7 @@ const wire = @import("allocation_perf.zig");
 const perf = @import("linux_perf.zig");
 const native = @import("linux_allocations.zig");
 const a = std.heap.page_allocator;
-const broker = @cImport({
-    @cInclude("allocation_broker.h");
-});
+const broker = @import("c_profile_allocation_live");
 
 pub const Stop = enum { manual, duration, record_limit, memory_limit, evidence_gap, target_ended, thread_ended, image_changed, mapping_changed, scope_changed, collector_error, shutdown };
 pub const Config = struct {
@@ -74,7 +72,7 @@ const Job = struct {
             self.requests[self.request_count].name = try a.dupe(u8, request.name);
             self.request_count += 1;
         }
-        if (helper) |path| self.helper = try a.dupeZ(u8, path);
+        if (helper) |path| self.helper = try a.dupeSentinel(u8, path, 0);
         self.worker = try std.Thread.spawn(.{}, run, .{self});
         return self;
     }

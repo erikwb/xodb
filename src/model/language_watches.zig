@@ -225,7 +225,7 @@ fn createLuaWatch(session: *Session, a: A, tid: i32, segment: usize, frame: usiz
 }
 fn observeLuaWatch(session: *Session, a: A, tid: i32, scope: c.struct_xlw_scope, expression: []const u8) !Capture {
     try session.languages.require(.lua);
-    const checked = try a.dupeZ(u8, expression);
+    const checked = try a.dupeSentinel(u8, expression, 0);
     const observed = try @import("language_selection.zig").cachedRead(.lua, session, tid);
     return lua.observeWatch(&session.languageContext(), a, observed, scope, checked);
 }
@@ -238,7 +238,7 @@ fn createRubyWatch(session: *Session, a: A, tid: i32, segment: usize, frame: usi
 }
 fn observeRubyWatch(session: *Session, a: A, tid: i32, scope: c.struct_xlw_scope, expression: []const u8) !Capture {
     try session.languages.require(.ruby);
-    const checked = try a.dupeZ(u8, expression);
+    const checked = try a.dupeSentinel(u8, expression, 0);
     const observed = try @import("language_selection.zig").cachedRead(.ruby, session, tid);
     return ruby.observeWatch(&session.languageContext(), a, observed, scope, checked);
 }
@@ -251,7 +251,7 @@ fn createPythonWatch(session: *Session, a: A, tid: i32, segment: usize, frame: u
 }
 fn observePythonWatch(session: *Session, a: A, tid: i32, scope: c.struct_xlw_scope, expression: []const u8) !Capture {
     try session.languages.require(.python);
-    const checked = try a.dupeZ(u8, expression);
+    const checked = try a.dupeSentinel(u8, expression, 0);
     const observed = @import("language_selection.zig").cachedRead(.python, session, tid);
     return python.observeWatch(&session.languageContext(), a, observed, scope, checked);
 }
@@ -264,7 +264,7 @@ fn createPerlWatch(session: *Session, a: A, tid: i32, segment: usize, frame: usi
 }
 fn observePerlWatch(session: *Session, a: A, tid: i32, scope: c.struct_xlw_scope, expression: []const u8) !Capture {
     try session.languages.require(.perl);
-    const checked = try a.dupeZ(u8, expression);
+    const checked = try a.dupeSentinel(u8, expression, 0);
     const observed = @import("language_selection.zig").cachedRead(.perl, session, tid);
     return perl.observeWatch(&session.languageContext(), a, observed, scope, checked);
 }
@@ -277,7 +277,7 @@ fn createJavaScriptWatch(session: *Session, a: A, tid: i32, segment: usize, fram
 }
 fn observeJavaScriptWatch(session: *Session, a: A, tid: i32, scope: c.struct_xlw_scope, expression: []const u8) !Capture {
     try session.languages.require(.javascript);
-    const checked = try a.dupeZ(u8, expression);
+    const checked = try a.dupeSentinel(u8, expression, 0);
     const observed = try @import("language_selection.zig").cachedRead(.javascript, session, tid);
     return javascript.observeWatch(&session.languageContext(), a, observed, scope, checked);
 }

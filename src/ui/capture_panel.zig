@@ -78,7 +78,7 @@ pub const Panel = struct {
     fn matches(self: *const Panel, row: setup.ThreadRow) bool {
         const want = self.filterText();
         if (want.len == 0) return true;
-        if (std.ascii.indexOfIgnoreCase(row.name, want) != null) return true;
+        if (std.ascii.findIgnoreCase(row.name, want) != null) return true;
         var buffer: [16]u8 = undefined;
         const tid = std.fmt.bufPrint(&buffer, "{d}", .{row.ref.tid}) catch return false;
         return std.mem.startsWith(u8, tid, want);

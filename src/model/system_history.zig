@@ -51,7 +51,7 @@ pub const Scalar = enum {
         };
     }
 };
-const scalar_count = @typeInfo(Scalar).@"enum".fields.len;
+const scalar_count = @typeInfo(Scalar).@"enum".field_names.len;
 pub const disk_series = [_][]const u8{ "read_bps", "write_bps", "busy_pct" };
 pub const net_series = [_][]const u8{ "rx_bps", "tx_bps" };
 pub const process_series = [_][]const u8{ "cpu_pct", "rss" };
@@ -96,7 +96,7 @@ pub const History = struct {
         return scalar_count + cpus + max_devices * (disk_series.len + net_series.len) + max_tracked * process_series.len;
     }
     pub fn scalarColumn(_: *const History, s: Scalar) usize {
-        return @intFromEnum(s);
+        return @backingInt(s);
     }
     pub fn cpuColumn(_: *const History, i: usize) usize {
         return scalar_count + i;
@@ -146,35 +146,35 @@ pub const History = struct {
                 return m & (@as(u32, 1) << @intCast(id)) != 0;
             }
         }.bit;
-        self.put(@intFromEnum(Scalar.collector_cpu_pct), row, f(snap.self.cpu_pct_of_core));
+        self.put(@backingInt(Scalar.collector_cpu_pct), row, f(snap.self.cpu_pct_of_core));
         if (has(mask, c.XRT_SYS_G_SUMMARY)) {
-            self.put(@intFromEnum(Scalar.load1), row, f(snap.summary.load1));
-            self.put(@intFromEnum(Scalar.cpu_busy_pct), row, f(snap.summary.cpu_busy_pct));
+            self.put(@backingInt(Scalar.load1), row, f(snap.summary.load1));
+            self.put(@backingInt(Scalar.cpu_busy_pct), row, f(snap.summary.cpu_busy_pct));
         }
         if (has(mask, c.XRT_SYS_G_CPU)) {
             const cpu = &snap.cpu;
-            if (f(cpu.total.busy)) |busy| self.put(@intFromEnum(Scalar.cpu_busy_pct), row, busy);
-            self.put(@intFromEnum(Scalar.cpu_user_pct), row, f(cpu.total.user));
-            self.put(@intFromEnum(Scalar.cpu_system_pct), row, f(cpu.total.system));
-            self.put(@intFromEnum(Scalar.cpu_iowait_pct), row, f(cpu.total.iowait));
-            self.put(@intFromEnum(Scalar.psi_cpu_some10), row, f(cpu.psi.some_avg10));
-            self.put(@intFromEnum(Scalar.psi_cpu_full10), row, f(cpu.psi.full_avg10));
+            if (f(cpu.total.busy)) |busy| self.put(@backingInt(Scalar.cpu_busy_pct), row, busy);
+            self.put(@backingInt(Scalar.cpu_user_pct), row, f(cpu.total.user));
+            self.put(@backingInt(Scalar.cpu_system_pct), row, f(cpu.total.system));
+            self.put(@backingInt(Scalar.cpu_iowait_pct), row, f(cpu.total.iowait));
+            self.put(@backingInt(Scalar.psi_cpu_some10), row, f(cpu.psi.some_avg10));
+            self.put(@backingInt(Scalar.psi_cpu_full10), row, f(cpu.psi.full_avg10));
             for (0..@min(self.cpus, cpu.count)) |i| self.put(self.cpuColumn(i), row, f(cpu.cpu[i].t.busy));
         }
         if (has(mask, c.XRT_SYS_G_MEMORY)) {
             const m = &snap.memory;
-            self.put(@intFromEnum(Scalar.memory_used), row, u(m.used));
-            self.put(@intFromEnum(Scalar.memory_available), row, u(m.available));
-            self.put(@intFromEnum(Scalar.memory_cached), row, u(m.cached));
-            self.put(@intFromEnum(Scalar.swap_used), row, u(m.swap_used));
-            self.put(@intFromEnum(Scalar.zswap_pool), row, u(m.zswap_pool));
-            self.put(@intFromEnum(Scalar.psi_memory_some10), row, f(m.psi.some_avg10));
-            self.put(@intFromEnum(Scalar.psi_memory_full10), row, f(m.psi.full_avg10));
+            self.put(@backingInt(Scalar.memory_used), row, u(m.used));
+            self.put(@backingInt(Scalar.memory_available), row, u(m.available));
+            self.put(@backingInt(Scalar.memory_cached), row, u(m.cached));
+            self.put(@backingInt(Scalar.swap_used), row, u(m.swap_used));
+            self.put(@backingInt(Scalar.zswap_pool), row, u(m.zswap_pool));
+            self.put(@backingInt(Scalar.psi_memory_some10), row, f(m.psi.some_avg10));
+            self.put(@backingInt(Scalar.psi_memory_full10), row, f(m.psi.full_avg10));
         }
         if (has(mask, c.XRT_SYS_G_DISKS)) {
             const d = &snap.disks;
-            self.put(@intFromEnum(Scalar.psi_io_some10), row, f(d.psi.some_avg10));
-            self.put(@intFromEnum(Scalar.psi_io_full10), row, f(d.psi.full_avg10));
+            self.put(@backingInt(Scalar.psi_io_some10), row, f(d.psi.some_avg10));
+            self.put(@backingInt(Scalar.psi_io_full10), row, f(d.psi.full_avg10));
             var read: ?f64 = null;
             var write: ?f64 = null;
             for (d.disk[0..@min(d.count, c.XRT_SYS_MAX_DISKS)]) |*disk| {
@@ -185,13 +185,13 @@ pub const History = struct {
                 self.put(self.diskColumn(slot, 1), row, f(disk.write_bps));
                 self.put(self.diskColumn(slot, 2), row, f(disk.busy_pct));
             }
-            self.put(@intFromEnum(Scalar.disk_read_bps), row, read);
-            self.put(@intFromEnum(Scalar.disk_write_bps), row, write);
+            self.put(@backingInt(Scalar.disk_read_bps), row, read);
+            self.put(@backingInt(Scalar.disk_write_bps), row, write);
         }
         if (has(mask, c.XRT_SYS_G_NETWORK)) {
             const n = &snap.network;
-            self.put(@intFromEnum(Scalar.net_rx_bps), row, f(n.rx_bps));
-            self.put(@intFromEnum(Scalar.net_tx_bps), row, f(n.tx_bps));
+            self.put(@backingInt(Scalar.net_rx_bps), row, f(n.rx_bps));
+            self.put(@backingInt(Scalar.net_tx_bps), row, f(n.tx_bps));
             for (n.iface[0..@min(n.count, c.XRT_SYS_MAX_IFACES)]) |*iface| {
                 const slot = slotFor(&self.nets, &self.net_count, std.mem.sliceTo(&iface.name, 0)) orelse continue;
                 self.put(self.netColumn(slot, 0), row, f(iface.rx_bps));

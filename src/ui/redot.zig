@@ -64,8 +64,8 @@ pub const Panel = struct {
 
     fn matchesProperty(self: *const Panel, property: protocol.Property) bool {
         const needle = self.filter[0..self.filter_len];
-        if (needle.len == 0 or std.ascii.indexOfIgnoreCase(property.name, needle) != null or std.ascii.indexOfIgnoreCase(property.display, needle) != null) return true;
-        for (property.children) |child| if (std.ascii.indexOfIgnoreCase(child.label, needle) != null or std.ascii.indexOfIgnoreCase(child.display, needle) != null) return true;
+        if (needle.len == 0 or std.ascii.findIgnoreCase(property.name, needle) != null or std.ascii.findIgnoreCase(property.display, needle) != null) return true;
+        for (property.children) |child| if (std.ascii.findIgnoreCase(child.label, needle) != null or std.ascii.findIgnoreCase(child.display, needle) != null) return true;
         return false;
     }
     fn propertyRow(self: *Panel, r: *gpu.Renderer, font: *Font, b: gpu.Rect, x: f32, width: f32, property: usize, label: []const u8, value: []const u8, marker: []const u8, ordinal: *usize) !void {

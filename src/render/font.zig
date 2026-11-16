@@ -325,7 +325,7 @@ test "bundled bitmap font covers every mark the overview source draws" {
     const inputs = @import("overview_font_sources");
     var seen: usize = 0;
     for (inputs.paths, inputs.sources) |path, text| {
-        const source = try a.dupeZ(u8, text);
+        const source = try a.dupeSentinel(u8, text, 0);
         defer a.free(source);
         // Zig's tokenizer skips comments while preserving // inside strings.
         var tokens = std.zig.Tokenizer.init(source);

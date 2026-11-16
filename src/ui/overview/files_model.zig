@@ -205,7 +205,7 @@ pub const State = struct {
         return self.query[0..self.query_len];
     }
     fn includes(self: *const State, value: []const u8) bool {
-        return self.query_len == 0 or std.ascii.indexOfIgnoreCase(value, self.text()) != null;
+        return self.query_len == 0 or std.ascii.findIgnoreCase(value, self.text()) != null;
     }
     pub fn path(s: *const c.struct_xrt_fd_snapshot, fd: c.struct_xrt_fd) []const u8 {
         if (fd.flags & c.XRT_FD_LINK_CUT != 0) return "path truncated";
@@ -374,7 +374,7 @@ test "descriptor presentation preserves scope, unknown progress and redaction" {
     var owner: Collector = .{};
     try std.testing.expect(!try state.refresh(a, &owner, 1, true));
     try std.testing.expect(owner.fd_collector == null);
-    var processes = [_]c.struct_xrt_fd_process{std.mem.zeroes(c.struct_xrt_fd_process)} ** 2;
+    var processes = @as([2]c.struct_xrt_fd_process, @splat(std.mem.zeroes(c.struct_xrt_fd_process)));
     processes[0].pid = 123;
     processes[0].start = 10;
     processes[0].count = 2;
@@ -385,7 +385,7 @@ test "descriptor presentation preserves scope, unknown progress and redaction" {
     processes[1].first = 2;
     processes[1].count = 1;
     processes[1].interval_ns = 1_000_000_000;
-    var fds = [_]c.struct_xrt_fd{std.mem.zeroes(c.struct_xrt_fd)} ** 3;
+    var fds = @as([3]c.struct_xrt_fd, @splat(std.mem.zeroes(c.struct_xrt_fd)));
     for (&fds, 0..) |*fd, i| {
         fd.fd = @intCast(i + 3);
         fd.kind = c.XRT_FD_REGULAR;

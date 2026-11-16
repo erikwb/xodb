@@ -44,7 +44,7 @@ const Preparation = struct {
             self.requests[self.request_count] = .{ .id = request.id, .name = try a.dupe(u8, request.name) };
             self.request_count += 1;
         }
-        if (helper) |path_| self.helper = try a.dupeZ(u8, path_);
+        if (helper) |path_| self.helper = try a.dupeSentinel(u8, path_, 0);
         self.worker = try std.Thread.spawn(.{}, run, .{self});
         return self;
     }

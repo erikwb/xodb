@@ -323,11 +323,11 @@ fn mk(dir: []const u8, comptime rel: []const u8, args: anytype, body: ?[]const u
     // mkdir -p
     var at: usize = 1;
     while (std.mem.indexOfScalarPos(u8, parent, at, '/')) |slash| : (at = slash + 1) {
-        _ = std.os.linux.mkdir(try std.fmt.bufPrintZ(&cb, "{s}", .{parent[0..slash]}), 0o755);
+        _ = std.os.linux.mkdir(try std.fmt.bufPrintSentinel(&cb, "{s}", .{parent[0..slash]}, 0), 0o755);
     }
-    _ = std.os.linux.mkdir(try std.fmt.bufPrintZ(&cb, "{s}", .{parent}), 0o755);
+    _ = std.os.linux.mkdir(try std.fmt.bufPrintSentinel(&cb, "{s}", .{parent}, 0), 0o755);
     if (body) |b| {
-        const rc = std.os.linux.open(try std.fmt.bufPrintZ(&cb, "{s}", .{p}), .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
+        const rc = std.os.linux.open(try std.fmt.bufPrintSentinel(&cb, "{s}", .{p}, 0), .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
         try testing.expect(std.os.linux.errno(rc) == .SUCCESS);
         _ = std.os.linux.write(@intCast(rc), b.ptr, b.len);
         _ = std.os.linux.close(@intCast(rc));
@@ -336,7 +336,7 @@ fn mk(dir: []const u8, comptime rel: []const u8, args: anytype, body: ?[]const u
 fn symlinkAt(dir: []const u8, comptime rel: []const u8, args: anytype, target: [:0]const u8) !void {
     var pb: [512]u8 = undefined;
     try mk(dir, rel, args, null);
-    const p = try std.fmt.bufPrintZ(&pb, "{s}/" ++ rel, .{dir} ++ args);
+    const p = try std.fmt.bufPrintSentinel(&pb, "{s}/" ++ rel, .{dir} ++ args, 0);
     _ = std.os.linux.symlink(target, p);
 }
 
@@ -416,7 +416,7 @@ test "in-use, spare and blocked cards from a synthetic tree" {
     const with_iwd = enumerate(roots, null);
     try testing.expectEqual(Role.in_use, with_iwd.find("wlan1").?.role);
     try testing.expect(std.mem.startsWith(u8, with_iwd.needs(&b), "the spectral-capable card is in use"));
-    _ = std.os.linux.unlink(try std.fmt.bufPrintZ(&b, "{s}/proc/90/comm", .{dir}));
+    _ = std.os.linux.unlink(try std.fmt.bufPrintSentinel(&b, "{s}/proc/90/comm", .{dir}, 0));
     try testing.expectEqual(Role.spare, enumerate(roots, null).find("wlan1").?.role);
     // Managers that do not say which cards they hold claim them all.
     for ([_][]const u8{ "connmand\n", "NetworkManager\n", "hostapd\n" }) |comm| {
@@ -427,7 +427,7 @@ test "in-use, spare and blocked cards from a synthetic tree" {
     try mk(dir, "proc/91/comm", .{}, "wpa_supplicant\n");
     try mk(dir, "proc/91/cmdline", .{}, "wpa_supplicant\x00-u\x00-s\x00");
     try testing.expectEqual(Role.in_use, enumerate(roots, null).find("wlan1").?.role);
-    _ = std.os.linux.unlink(try std.fmt.bufPrintZ(&b, "{s}/proc/91/comm", .{dir}));
+    _ = std.os.linux.unlink(try std.fmt.bufPrintSentinel(&b, "{s}/proc/91/comm", .{dir}, 0));
     // A second interface on the same card that is up (an AP, a p2p or monitor vif) makes it in use.
     try mk(dir, "sys/class/ieee80211/phy1/device/net/wlan1ap/x", .{}, "");
     try mk(dir, "sys/class/net/wlan1ap/flags", .{}, "0x1003\n");

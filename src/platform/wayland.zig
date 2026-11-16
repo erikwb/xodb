@@ -2,26 +2,7 @@
 //! through xkb.zig, clipboard.c, and the Vulkan surface for both.
 const std = @import("std");
 const log = @import("../log.zig");
-pub const c = @cImport({
-    @cUndef("_FORTIFY_SOURCE"); // as in c_ui.zig
-    @cDefine("_GNU_SOURCE", "1");
-    @cDefine("VK_USE_PLATFORM_WAYLAND_KHR", "1");
-    @cInclude("unistd.h");
-    @cInclude("stdlib.h");
-    @cInclude("errno.h");
-    @cInclude("poll.h");
-    @cInclude("time.h");
-    @cInclude("wayland-client.h");
-    @cInclude("../platform/clipboard.h");
-    @cInclude("xdg-shell-client-protocol.h");
-    @cInclude("xdg-decoration-unstable-v1-client-protocol.h");
-    @cInclude("cursor-shape-v1-client-protocol.h");
-    @cInclude("linux-dmabuf-v1-client-protocol.h");
-    @cInclude("fractional-scale-v1-client-protocol.h");
-    @cInclude("viewporter-client-protocol.h");
-    @cInclude("presentation-time-client-protocol.h");
-    @cInclude("vulkan/vulkan.h");
-});
+pub const c = @import("c_platform_wayland");
 const vk = @import("../c_ui.zig").api;
 const phases = @import("../startup_phases.zig");
 const platform = @import("window.zig");
@@ -363,14 +344,14 @@ pub const Window = struct {
         c.xclip_focus(self.clipboard, destination, epoch);
     }
     pub fn clipRequest(self: *Window, primary: bool) clip.Status {
-        return @enumFromInt(c.xclip_request(self.clipboard, primary));
+        return @fromBackingInt(@intCast(c.xclip_request(self.clipboard, primary)));
     }
     pub fn clipTake(self: *Window, out: *clip.Result) bool {
         var result: c.xclip_result = undefined;
         if (!c.xclip_take(self.clipboard, &result)) return false;
         out.destination = result.destination;
         out.epoch = result.epoch;
-        out.status = @enumFromInt(result.status);
+        out.status = @fromBackingInt(@intCast(result.status));
         out.size = result.size;
         @memcpy(out.bytes[0..result.size], result.bytes[0..result.size]);
         return true;
